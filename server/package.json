@@ -9,18 +9,37 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
-    "zod": "^3.25.67"
+    "zod": "^3.25.67",
+    "mongoose": "^8.16.0",
+    "bcryptjs": "^3.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "ioredis": "^5.6.1",
+    "helmet": "^8.1.0",
+    "express-rate-limit": "^7.5.0",
+    "rate-limit-redis": "^4.2.0",
+    "@prisma/client": "^6.10.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.1",
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "@types/jsonwebtoken": "^9.0.10",
+    "supertest": "^7.1.0",
+    "@types/supertest": "^6.0.3",
+    "prisma": "^6.10.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

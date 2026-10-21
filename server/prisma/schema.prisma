@@ -1,0 +1,253 @@
+// ITSM Platform — Prisma schema (source of truth for the Supabase Postgres database)
+//
+// Conventions:
+// - Native PG enums for all status/role/priority vocabularies.
+// - Append-only history tables (activities, assignments, audit_logs, decisions,
+//   stock_movements, revisions) are never mutated — only inserted.
+// - Multi-table invariants run inside transactions (see services).
+// - Json is used ONLY for: catalog form schemas, audit snapshots, automation
+//   rule definitions, and the configurable priority matrix.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/* ── Identity & access ──────────────────────────────────────────────────── */
+
+enum Role {
+  super_admin
+  it_admin
+  it_manager
+  it_technician
+  employee
+  approver
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  active       Boolean   @default(true)
+  employee     Employee?
+  roles        UserRole[]
+  sessions     Session[]
+  managedGroups           AssignmentGroup[]        @relation("groupManager")
+  groupMemberships        AssignmentGroupMember[]  @relation("groupMemberships")
+  auditEntries            AuditLog[]               @relation("auditActor")
+  settingsModifications   SystemSettings[]         @relation("settingsModifier")
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([active])
+}
+
+model UserRole {
+  userId String
+  role   Role
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@index([role])
+}
+
+/// Refresh-token sessions. Rotation revokes; reuse detection revokes the family.
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  ip               String?
+  userAgent        String?
+  createdAt        DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/* ── Organization ───────────────────────────────────────────────────────── */
+
+enum EmploymentStatus {
+  active
+  on_leave
+  inactive
+  terminated
+}
+
+model Employee {
+  id               String           @id @default(cuid())
+  employeeId       String           @unique
+  userId           String?          @unique
+  user             User?            @relation(fields: [userId], references: [id])
+  name             String
+  email            String
+  departmentId     String?
+  department       Department?      @relation("deptEmployees", fields: [departmentId], references: [id])
+  jobTitle         String?
+  managerId        String?
+  manager          Employee?        @relation("mgrReports", fields: [managerId], references: [id])
+  reports          Employee[]       @relation("mgrReports")
+  locationId       String?
+  location         Location?        @relation(fields: [locationId], references: [id])
+  employmentStatus EmploymentStatus @default(active)
+  phone            String?
+  managedDepartments Department[]   @relation("deptManager")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([departmentId])
+  @@index([locationId])
+  @@index([managerId])
+}
+
+model Department {
+  id              String     @id @default(cuid())
+  name            String
+  code            String     @unique
+  managerId       String?
+  manager         Employee?  @relation("deptManager", fields: [managerId], references: [id])
+  employees       Employee[] @relation("deptEmployees")
+  officeLocationId String?
+  officeLocation  Location?  @relation("deptOffice", fields: [officeLocationId], references: [id])
+  timezone        String     @default("UTC")
+  supportGroupId  String?
+  supportGroup    AssignmentGroup? @relation("deptSupport", fields: [supportGroupId], references: [id])
+  active          Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Location {
+  id         String       @id @default(cuid())
+  name       String
+  code       String       @unique
+  address    String?
+  timezone   String       @default("UTC")
+  active     Boolean      @default(true)
+  employees  Employee[]
+  departments Department[] @relation("deptOffice")
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+enum GroupRole {
+  member
+  lead
+}
+
+model AssignmentGroup {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+  managerId   String?
+  manager     User?    @relation("groupManager", fields: [managerId], references: [id])
+  members     AssignmentGroupMember[]
+  departments Department[] @relation("deptSupport")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Membership history: removal sets leftAt (rows are never deleted).
+model AssignmentGroupMember {
+  id       String    @id @default(cuid())
+  groupId  String
+  group    AssignmentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User      @relation("groupMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  role     GroupRole @default(member)
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  @@index([groupId, leftAt])
+  @@index([userId])
+}
+
+/* ── Platform ───────────────────────────────────────────────────────────── */
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation("auditActor", fields: [actorId], references: [id])
+  actorEmail String?
+  action     String
+  targetType String?
+  targetId   String?
+  before     Json?
+  after      Json?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([action])
+  @@index([targetType, targetId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}
+
+/// Singleton row (key = 'global'). Json holds the configurable priority matrix.
+model SystemSettings {
+  id                    String   @id @default(cuid())
+  key                   String   @unique @default("global")
+  priorityMatrix        Json
+  slaPauseStates        String[]
+  reopenWindowDays      Int      @default(3)
+  autoCloseResolvedDays Int      @default(5)
+  maxAutomationLoopDepth Int     @default(5)
+  modifiedById          String?
+  modifiedBy            User?    @relation("settingsModifier", fields: [modifiedById], references: [id])
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model BusinessCalendar {
+  id         String             @id @default(cuid())
+  name       String
+  timezone   String             @default("UTC")
+  isDefault  Boolean            @default(false)
+  active     Boolean            @default(true)
+  workWindows CalendarWorkWindow[]
+  holidays   CalendarHoliday[]
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+}
+
+model CalendarWorkWindow {
+  id         String  @id @default(cuid())
+  calendarId String
+  calendar   BusinessCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  day        Weekday
+  start      String
+  end        String
+
+  @@index([calendarId])
+}
+
+enum Weekday {
+  sun
+  mon
+  tue
+  wed
+  thu
+  fri
+  sat
+}
+
+model CalendarHoliday {
+  id         String  @id @default(cuid())
+  calendarId String
+  calendar   BusinessCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date
+  name       String?
+
+  @@unique([calendarId, date])
+}

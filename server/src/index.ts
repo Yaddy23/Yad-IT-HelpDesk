@@ -1,18 +1,33 @@
 import 'dotenv/config';
 
-import express from 'express';
+import { env } from './config/env.js';
+import { createApp } from './app.js';
+import { connectDatabase, disconnectDatabase } from './prisma/client.js';
+import { closeRedis } from './core/redis.js';
+import { logger } from './core/logger.js';
 
-const app = express();
-const PORT = Number(process.env.PORT ?? 5000);
+async function main() {
+  await connectDatabase();
 
-app.use(express.json({ limit: '1mb' }));
+  const app = createApp();
+  const server = app.listen(env.PORT, () => {
+    logger.info(`[server] ITSM API (${env.NODE_ENV}) listening on http://localhost:${env.PORT}`);
+  });
 
-app.get('/api/v1/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'itsm-api', version: 'v1', time: new Date().toISOString() });
+  const shutdown = async (signal: string) => {
+    logger.info(`[server] ${signal} received — shutting down`);
+    server.close(async () => {
+      await disconnectDatabase();
+      await closeRedis();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+}
+
+main().catch((err) => {
+  logger.error('[server] Fatal startup error', err);
+  process.exit(1);
 });
-
-app.listen(PORT, () => {
-  console.log(`[server] ITSM API listening on http://localhost:${PORT}`);
-});
-
-export default app;
