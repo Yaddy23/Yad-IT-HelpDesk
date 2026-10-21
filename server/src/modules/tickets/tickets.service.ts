@@ -10,7 +10,7 @@ import { getSystemSettings } from '../settings/settings.routes.js';
 import { OPEN_STATUSES } from './tickets.statuses.js';
 
 /** hasPermission with the auth-context role list (typed string[] → Role[]). */
-function can(user: AuthedUser, permission: Permission): boolean {
+export function can(user: AuthedUser, permission: Permission): boolean {
   return hasPermission({ roles: user.roles as Role[] }, permission);
 }
 

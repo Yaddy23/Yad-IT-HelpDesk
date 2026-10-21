@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
-import { CloseIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, MoonIcon, SearchIcon, SunIcon } from '@/components/icons';
+import GlobalSearch from '@/components/GlobalSearch';
+import { CloseIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, MoonIcon, SunIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { NAV_ITEMS } from '@/lib/nav';
 import { applyTheme, loadTheme } from '@/lib/theme';
@@ -29,22 +30,6 @@ function ThemeToggle() {
     >
       {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
     </button>
-  );
-}
-
-function GlobalSearch() {
-  return (
-    <label className="relative flex min-w-0 flex-1 items-center sm:max-w-md">
-      <span className="absolute left-2.5 text-muted-foreground">
-        <SearchIcon size={16} />
-      </span>
-      <input
-        type="search"
-        placeholder="Search tickets, assets, users…"
-        aria-label="Global search"
-        className="w-full rounded-md border border-border bg-card py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground transition-colors hover:border-ring/40 focus:border-ring"
-      />
-    </label>
   );
 }
 

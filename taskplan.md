@@ -25,7 +25,7 @@ Process: superpowers (brainstorm → design → plan → phased build). After ea
 - [x] Ticket lifecycle: state machine, assignment history, queues (unassigned, my, group), reopen rules
 - [x] Comments (public) vs work notes (internal) — query-level access control; activity timeline; attachments (Supabase Storage private bucket, mediated signed-URL downloads, audited)
 - [x] Ticket detail page (summary, badges, timeline, actions), lists (sort/filter/paginate/queues), create-incident flow — *SLA chips (Phase 3), saved views, employee portal polish deferred*
-- [ ] Global search with record-level authorization
+- [x] Global search with record-level authorization — `/api/v1/search` reuses the ticket scope filter; people results for `users:manage`; debounced top-bar search with keyboard/click navigation
 - ✅ Acceptance: brief tests 1–4, 20 (note invisibility, attachment authz) — *tests 1–4 in `server/tests/tickets.spec.ts` + `server/tests/attachments.spec.ts`; test 20 partial (note invisibility + attachment authz covered)*
 
 ## Phase 3 — SLA & Communication

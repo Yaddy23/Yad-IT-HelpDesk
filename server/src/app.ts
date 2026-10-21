@@ -13,6 +13,7 @@ import { departmentsRouter, groupsRouter, locationsRouter } from './modules/org/
 import { settingsRouter } from './modules/settings/settings.routes.js';
 import { auditRouter } from './modules/audit/audit.routes.js';
 import { ticketsRouter } from './modules/tickets/tickets.routes.js';
+import { searchRouter } from './modules/search/search.routes.js';
 export function createApp(): Express {
   const app = express();
 
@@ -40,6 +41,7 @@ export function createApp(): Express {
   app.use('/api/v1/settings', settingsRouter);
   app.use('/api/v1/audit', auditRouter);
   app.use('/api/v1/tickets', ticketsRouter);
+  app.use('/api/v1/search', searchRouter);
 
   // SPA fallback for client-side routing — only for non-API GET requests.
   app.get(/^(?!\/api\/).*/, (_req, res) => {
