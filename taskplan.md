@@ -16,7 +16,7 @@ Process: superpowers (brainstorm → design → plan → phased build). After ea
 - [x] Auth design: JWT sessions, refresh rotation + reuse detection, revocation, rate limiting, `/auth/bootstrap` (SETUP_TOKEN, locks after first admin) — *conversion pending*
 - [x] RBAC design: permission catalog + middleware + record-level scoping plan — *conversion pending*
 - [x] Tests: integration suite against Supabase `test` schema (bootstrap, login, refresh rotation, RBAC 403s, audit written); pure unit tests for priority matrix — 10/10 green
-- [ ] Client: design tokens via ui-ux-pro-max; app shell (sidebar/topbar/global search), login page, role-based nav + route guards
+- [x] Client: design tokens via ui-ux-pro-max; app shell (sidebar/topbar/global search), login page, role-based nav + route guards
 - [x] Seed script (`prisma db seed`): demo org (departments, locations, groups, labeled demo users) + default business calendar + system settings
 - ✅ Acceptance: login works for seeded roles; permission middleware blocks unauthorized API paths; audit entries written; dark/light theme
 

@@ -1,38 +1,58 @@
-import { useEffect, useState } from 'react';
+import { Route, Routes } from 'react-router-dom';
 
-interface Health {
-  status: string;
-  service: string;
-  version: string;
-  time: string;
-}
+import AppShell from '@/components/AppShell';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
+import DashboardPage from '@/pages/DashboardPage';
+import LoginPage from '@/pages/LoginPage';
+import PlaceholderPage from '@/pages/PlaceholderPage';
 
 export default function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch('/api/v1/health')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setHealth)
-      .catch((e: Error) => setError(e.message));
-  }, []);
-
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
-      <div className="rounded-xl border border-border bg-card p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold tracking-tight">ITSM Platform</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Phase 1 scaffold — API connection:{' '}
-          {health ? (
-            <span className="font-medium text-green-600">{health.status}</span>
-          ) : error ? (
-            <span className="font-medium text-red-600">unreachable ({error})</span>
-          ) : (
-            <span className="text-muted-foreground">checking…</span>
-          )}
-        </p>
-      </div>
-    </main>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppShell />}>
+          <Route index element={<DashboardPage />} />
+          <Route
+            path="tickets"
+            element={<ProtectedRoute permissions={['tickets:read']}>
+              <PlaceholderPage title="Tickets" phase="Phase 2" />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="approvals"
+            element={<ProtectedRoute permissions={['approvals:decide']}>
+              <PlaceholderPage title="Approvals" phase="Phase 5" />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="admin/users"
+            element={<ProtectedRoute permissions={['users:manage']}>
+              <PlaceholderPage title="User Administration" phase="Phase 2 polish" />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="admin/org"
+            element={<ProtectedRoute permissions={['org:manage']}>
+              <PlaceholderPage title="Organization" phase="Phase 2 polish" />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="admin/settings"
+            element={<ProtectedRoute permissions={['settings:manage']}>
+              <PlaceholderPage title="System Settings" phase="Phase 6" />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="admin/audit"
+            element={<ProtectedRoute permissions={['audit:read']}>
+              <PlaceholderPage title="Audit Log" phase="Phase 2 polish" />
+            </ProtectedRoute>}
+          />
+          <Route path="*" element={<PlaceholderPage title="Not found" phase="—" />} />
+        </Route>
+      </Route>
+    </Routes>
   );
 }
