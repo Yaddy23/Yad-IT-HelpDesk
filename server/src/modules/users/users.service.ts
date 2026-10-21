@@ -14,7 +14,7 @@ const userPublicSelect = {
   lastLoginAt: true,
   createdAt: true,
   roles: { select: { role: true } },
-  employee: { select: { employeeId: true, name: true, jobTitle: true, departmentId: true, locationId: true } },
+  employee: { select: { id: true, employeeId: true, name: true, jobTitle: true, departmentId: true, locationId: true } },
 } satisfies Prisma.UserSelect;
 
 type PublicUser = Prisma.UserGetPayload<{ select: typeof userPublicSelect }>;
@@ -57,6 +57,7 @@ export async function getUser(id: string) {
       ...userPublicSelect,
       employee: {
         select: {
+          id: true,
           employeeId: true,
           name: true,
           jobTitle: true,

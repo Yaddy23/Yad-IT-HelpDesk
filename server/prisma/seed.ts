@@ -164,6 +164,68 @@ async function main() {
     }
   }
 
+  // Demo tickets (only when the ticket table is empty)
+  const ticketCount = await prisma.ticket.count();
+  if (ticketCount === 0) {
+    const users = await prisma.user.findMany({
+      where: { email: { endsWith: '@demo.local' } },
+      include: { employee: true },
+    });
+    const byEmail = new Map(users.map((u) => [u.email, u]));
+    const emp = byEmail.get('employee@demo.local')?.employee;
+    const fin = byEmail.get('finance@demo.local')?.employee;
+    const tech1 = byEmail.get('tech1@demo.local')?.employee;
+    const tech1User = byEmail.get('tech1@demo.local');
+    const adminUser = byEmail.get('admin@demo.local');
+
+    if (emp && tech1 && tech1User && adminUser) {
+      const demoTickets = [
+        {
+          number: 'INC-2026-000001',
+          title: 'Laptop will not connect to Wi-Fi',
+          description: 'Since this morning my laptop cannot see the office Wi-Fi network. Other devices work fine.',
+          category: 'network',
+          impact: 'medium' as const,
+          urgency: 'high' as const,
+          priority: 'high' as const,
+          status: 'in_progress' as const,
+          requesterId: emp.id,
+          assigneeId: tech1.id,
+          groupId: group.id,
+        },
+        {
+          number: 'INC-2026-000002',
+          title: 'Expense approval stuck in finance queue',
+          description: 'An expense report has been pending approval for three days. Need it processed before the cut-off.',
+          category: 'finance_system',
+          impact: 'low' as const,
+          urgency: 'medium' as const,
+          priority: 'low' as const,
+          status: 'new' as const,
+          requesterId: (fin ?? emp).id,
+          assigneeId: null,
+          groupId: null,
+        },
+      ];
+      for (const t of demoTickets) {
+        await prisma.ticket.create({
+          data: {
+            ...t,
+            activities: {
+              create: { actorId: adminUser.id, action: 'created', detail: { seeded: true } },
+            },
+          },
+        });
+      }
+      await prisma.ticketCounter.upsert({
+        where: { key: 'INC' },
+        update: { next: 3 },
+        create: { key: 'INC', next: 3 },
+      });
+      console.log('   Seeded 2 demo tickets.');
+    }
+  }
+
   console.log('✅ Seed complete. DEMO accounts (password: %s):', DEMO_PASSWORD);
   for (const u of demoUsers) console.log(`   - ${u.email}  (${u.roles.join(', ')})`);
   console.log('   Default calendar:', defaultCalendar.name);

@@ -17,6 +17,13 @@ const envSchema = z.object({
   // background jobs cannot run (Phase 3 will enforce this harder).
   REDIS_URL: z.string().optional(),
 
+  // Supabase Storage (private bucket) for ticket attachments. Either unset or
+  // empty → attachment endpoints respond 503 instead of failing the whole boot.
+  SUPABASE_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
+  SUPABASE_SERVICE_ROLE_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional()),
+  ATTACHMENTS_BUCKET: z.string().default('ticket-attachments'),
+  ATTACHMENTS_MAX_MB: z.coerce.number().int().positive().default(10),
+
   JWT_SECRET: z.string().min(24, 'JWT_SECRET must be at least 24 chars'),
   JWT_EXPIRES_IN: z.string().default('8h'),
   REFRESH_SECRET: z.string().min(24, 'REFRESH_SECRET must be at least 24 chars'),

@@ -16,28 +16,30 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@prisma/client": "^6.10.0",
+    "bcryptjs": "^3.0.2",
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
-    "zod": "^3.25.67",
-    "mongoose": "^8.16.0",
-    "bcryptjs": "^3.0.2",
-    "jsonwebtoken": "^9.0.2",
-    "ioredis": "^5.6.1",
-    "helmet": "^8.1.0",
     "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.6.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.16.0",
+    "multer": "^2.4.0",
     "rate-limit-redis": "^4.2.0",
-    "@prisma/client": "^6.10.0"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/express": "^5.0.1",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.3.0",
     "@types/node": "^24.0.0",
+    "@types/supertest": "^6.0.3",
+    "prisma": "^6.10.0",
+    "supertest": "^7.1.0",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3",
-    "vitest": "^5.0.5",
-    "@types/jsonwebtoken": "^9.0.10",
-    "supertest": "^7.1.0",
-    "@types/supertest": "^6.0.3",
-    "prisma": "^6.10.0"
+    "vitest": "^5.0.5"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

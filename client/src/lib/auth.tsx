@@ -10,6 +10,7 @@ export interface AuthUser {
   roles: string[];
   permissions: string[];
   employee: {
+    id: string;
     employeeId: string;
     name: string;
     email: string;

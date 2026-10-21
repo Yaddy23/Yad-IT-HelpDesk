@@ -61,6 +61,10 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     logger.error(`[http] Prisma error ${err.code}`, err);
     return res.status(500).json({ error: { code: 'DB_ERROR', message: 'Database operation failed' } });
   }
+  // express.json() parse failures (malformed JSON) surface as SyntaxError.
+  if (err instanceof SyntaxError && 'status' in err && (err as { status?: number }).status === 400) {
+    return res.status(400).json({ error: { code: 'MALFORMED_JSON', message: 'Request body is not valid JSON' } });
+  }
   if (typeof err === 'object' && err !== null && 'name' in err) {
     const name = (err as { name?: string }).name;
     if (name === 'JsonWebTokenError') {

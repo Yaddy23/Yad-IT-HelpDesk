@@ -5,6 +5,9 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import DashboardPage from '@/pages/DashboardPage';
 import LoginPage from '@/pages/LoginPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
+import TicketCreatePage from '@/pages/TicketCreatePage';
+import TicketDetailPage from '@/pages/TicketDetailPage';
+import TicketsPage from '@/pages/TicketsPage';
 
 export default function App() {
   return (
@@ -17,7 +20,19 @@ export default function App() {
           <Route
             path="tickets"
             element={<ProtectedRoute permissions={['tickets:read']}>
-              <PlaceholderPage title="Tickets" phase="Phase 2" />
+              <TicketsPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="tickets/new"
+            element={<ProtectedRoute permissions={['tickets:create']}>
+              <TicketCreatePage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="tickets/:id"
+            element={<ProtectedRoute permissions={['tickets:read']}>
+              <TicketDetailPage />
             </ProtectedRoute>}
           />
           <Route

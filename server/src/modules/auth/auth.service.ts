@@ -187,6 +187,7 @@ export async function getEmployeeProfile(employeeId: string) {
   return prisma.employee.findUnique({
     where: { id: employeeId },
     select: {
+      id: true,
       employeeId: true,
       name: true,
       email: true,
