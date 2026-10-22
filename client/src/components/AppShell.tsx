@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import GlobalSearch from '@/components/GlobalSearch';
+import NotificationsBell from '@/components/NotificationsBell';
 import { CloseIcon, LifeBuoyIcon, LogOutIcon, MenuIcon, MoonIcon, SunIcon } from '@/components/icons';
 import { useAuth } from '@/lib/auth';
 import { NAV_ITEMS } from '@/lib/nav';
@@ -142,6 +143,7 @@ export default function AppShell() {
           </button>
           <GlobalSearch />
           <div className="flex items-center gap-1">
+            <NotificationsBell />
             <ThemeToggle />
           </div>
         </header>

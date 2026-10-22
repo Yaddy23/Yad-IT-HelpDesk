@@ -80,11 +80,22 @@ export interface TicketAttachment {
   uploadedBy: { id: string; name: string };
 }
 
+export interface SlaIndicator {
+  id: string;
+  policyName: string;
+  type: 'response' | 'resolution';
+  state: 'within' | 'approaching' | 'breached' | 'paused' | 'met' | 'missed';
+  targetMins: number | null;
+  elapsedMins: number;
+  deadlineAt: string | null;
+}
+
 export interface TicketDetailData extends Ticket {
   comments: TicketComment[];
   activities: TicketActivity[];
   assignments: TicketAssignmentRecord[];
   attachments: TicketAttachment[];
+  sla?: SlaIndicator[];
 }
 
 export interface TicketListMeta {

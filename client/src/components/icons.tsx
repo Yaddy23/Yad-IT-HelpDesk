@@ -122,3 +122,17 @@ export const LifeBuoyIcon = (p: IconProps) => (
     <path d="m5.7 5.7 3.8 3.8m5 5 3.8 3.8m0-12.6-3.8 3.8m-5 5-3.8 3.8" />
   </svg>
 );
+
+export const BellIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 9a6 6 0 0 1 12 0c0 4.5 1.5 5.5 2 6.5H4c.5-1 2-2 2-6.5Z" />
+    <path d="M10 19a2.2 2.2 0 0 0 4 0" />
+  </svg>
+);
+
+export const CheckAllIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m2 13 4 4L14 9" />
+    <path d="m10 13 4 4L22 9" />
+  </svg>
+);

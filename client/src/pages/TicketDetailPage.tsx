@@ -3,7 +3,7 @@ import type { ChangeEvent, FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { PriorityBadge, STATUS_LABELS, StatusBadge } from '@/components/TicketBadges';
+import { PriorityBadge, SlaChips, STATUS_LABELS, StatusBadge } from '@/components/TicketBadges';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { ticketsApi, type TicketStatus } from '@/lib/ticketsApi';
@@ -156,6 +156,7 @@ export default function TicketDetailPage() {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StatusBadge status={t.status} />
             <PriorityBadge priority={t.priority} />
+            <SlaChips sla={t.sla} />
             <span className="rounded-full border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">
               {t.category.replace('_', ' ')}
             </span>

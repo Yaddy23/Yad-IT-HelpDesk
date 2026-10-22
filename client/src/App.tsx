@@ -4,6 +4,7 @@ import AppShell from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import DashboardPage from '@/pages/DashboardPage';
 import LoginPage from '@/pages/LoginPage';
+import NotificationsPage from '@/pages/NotificationsPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 import TicketCreatePage from '@/pages/TicketCreatePage';
 import TicketDetailPage from '@/pages/TicketDetailPage';
@@ -35,6 +36,7 @@ export default function App() {
               <TicketDetailPage />
             </ProtectedRoute>}
           />
+          <Route path="notifications" element={<NotificationsPage />} />
           <Route
             path="approvals"
             element={<ProtectedRoute permissions={['approvals:decide']}>
