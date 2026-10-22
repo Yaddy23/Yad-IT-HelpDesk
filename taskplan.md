@@ -29,12 +29,12 @@ Process: superpowers (brainstorm → design → plan → phased build). After ea
 - ✅ Acceptance: brief tests 1–4, 20 (note invisibility, attachment authz) — *tests 1–4 in `server/tests/tickets.spec.ts` + `server/tests/attachments.spec.ts`; test 20 partial (note invisibility + attachment authz covered)*
 
 ## Phase 3 — SLA & Communication
-- [ ] businessTime engine (calendars, holidays, TZ, pause states) + unit tests
-- [ ] sla_policies + sla_instances; recompute on priority/category change; pause/resume; indicators
-- [ ] BullMQ infra: queues, retries+backoff, idempotency keys, failed-job log; repeatable SLA sweep + threshold delayed jobs (state rechecked)
-- [ ] Escalation chains (once per threshold, auditable)
-- [ ] Notifications: in-app inbox, preferences, Socket.IO live delivery; Nodemailer SMTP (dev-console mode clearly labeled) via background queue
-- ✅ Acceptance: brief tests 5–8, 22 (approaching→warning, breach→escalation, no dupes on retry)
+- [x] businessTime engine (calendars, holidays, TZ, pause states) + unit tests — `server/src/sla/businessTime.ts`, 13 unit tests green
+- [x] sla_policies + sla_instances; recompute on priority/category change; pause/resume; indicators — event hooks in tickets.service (create/assign/transition/priority/comment), `sla` chips payload on ticket detail, `/api/v1/sla-policies` admin CRUD
+- [x] BullMQ infra: queues, retries+backoff, idempotency keys, failed-job log; repeatable SLA sweep + threshold delayed jobs (state rechecked) — `server/src/jobs/scheduler.ts`, BullMQ when REDIS_URL else in-memory timers, JobRun log, `nextWakeUpMs` threshold wake-ups
+- [x] Escalation chains (once per threshold, auditable) — DB-unique `@@unique([instanceId, thresholdKey])`, warning + breach notifications (assignee + it_manager), audit `sla.breached`/`sla.warning`
+- [x] Notifications: in-app inbox (API + dedupeKey), preferences (GET/PUT `/notifications/preferences`, per-user gating), Socket.IO live delivery (`server/src/core/socket.ts`, JWT handshake, personal rooms, client invalidates queries), Nodemailer SMTP via background queue with dev-console mode (`[email:DEV-CONSOLE-MODE]` label); client: bell + dropdown (`NotificationsBell.tsx`), inbox + delivery prefs page (`NotificationsPage.tsx`, `/notifications`), socket lib + API client — *server/.env: SMTP_* keys optional, dev mode when unset*
+- ✅ Acceptance: brief tests 5–8, 22 (approaching→warning, breach→escalation, no dupes on retry) — `server/tests/sla.spec.ts` (12 integration tests; running)
 
 ## Phase 4 — Asset Management
 - [ ] Assets + lifecycle transitions; asset numbers; custodian; warranty
