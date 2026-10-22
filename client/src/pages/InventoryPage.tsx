@@ -104,12 +104,6 @@ export default function InventoryPage() {
         </form>
       </div>
 
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
       <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
         {itemsQuery.isLoading ? (
           <div className="space-y-2 p-5">
@@ -176,6 +170,7 @@ export default function InventoryPage() {
         <StockMoveDialog
           item={selected}
           busy={stockMove.isPending}
+          error={error}
           onClose={() => setSelected(null)}
           onSubmit={(input) => stockMove.mutate({ ...input, itemId: selected.id })}
         />
@@ -187,11 +182,13 @@ export default function InventoryPage() {
 function StockMoveDialog({
   item,
   busy,
+  error,
   onClose,
   onSubmit,
 }: {
   item: InventoryItem;
   busy: boolean;
+  error: string;
   onClose: () => void;
   onSubmit: (input: { type: 'in' | 'out' | 'adjust'; delta?: number; resultingQuantity?: number; reason: string }) => void;
 }) {
@@ -206,6 +203,11 @@ function StockMoveDialog({
         <p className="mt-1 text-sm text-muted-foreground">
           Currently {item.quantity} {item.unit} on hand.
         </p>
+        {error && (
+          <p role="alert" className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
         <form
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
