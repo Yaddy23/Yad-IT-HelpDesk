@@ -5,6 +5,8 @@ import { createApp } from './app.js';
 import { connectDatabase, disconnectDatabase } from './prisma/client.js';
 import { closeRedis } from './core/redis.js';
 import { logger } from './core/logger.js';
+import { startScheduler, stopScheduler } from './jobs/scheduler.js';
+import { closeSocketServer, initSocketServer } from './core/socket.js';
 
 async function main() {
   await connectDatabase();
@@ -13,10 +15,17 @@ async function main() {
   const server = app.listen(env.PORT, () => {
     logger.info(`[server] ITSM API (${env.NODE_ENV}) listening on http://localhost:${env.PORT}`);
   });
+  initSocketServer(server);
+
+  if (env.WORKER_IN_PROCESS === 'true') {
+    startScheduler();
+  }
 
   const shutdown = async (signal: string) => {
     logger.info(`[server] ${signal} received — shutting down`);
     server.close(async () => {
+      await stopScheduler();
+      await closeSocketServer();
       await disconnectDatabase();
       await closeRedis();
       process.exit(0);

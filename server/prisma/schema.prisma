@@ -48,6 +48,8 @@ model User {
   ticketActivities      TicketActivity[]        @relation("ticketActivities")
   assignmentsMade       TicketAssignment[]      @relation("assignmentsMade")
   attachmentsUploaded   Attachment[]            @relation("attachmentUploader")
+  notifications         Notification[]
+  notificationPreference NotificationPreference?
   lastLoginAt           DateTime?
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
@@ -232,6 +234,7 @@ model BusinessCalendar {
   active      Boolean              @default(true)
   workWindows CalendarWorkWindow[]
   holidays    CalendarHoliday[]
+  slaPolicies SlaPolicy[]
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 }
@@ -328,6 +331,7 @@ model Ticket {
   activities             TicketActivity[]
   assignments            TicketAssignment[]
   attachments            Attachment[]
+  slaInstances           SlaInstance[]
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
@@ -409,4 +413,135 @@ model Attachment {
   createdAt    DateTime @default(now())
 
   @@index([ticketId, createdAt])
+}
+
+/**
+ * ── SLA engine ─────────────────────────────────────────────────────────────
+ * Targets are stored as MINUTES of business time (real minutes when no
+ * calendar is set). Elapsed = businessMs(startAt → now) − pausedMs; pause
+ * intervals are converted to business ms on resume so overnight/weekend
+ * pauses cost nothing. Deadlines are derived, never stored stale.
+ */
+
+enum SlaType {
+  response
+  resolution
+}
+
+enum SlaState {
+  within
+  approaching
+  breached
+  paused
+  met
+  missed
+}
+
+model SlaPolicy {
+  id                 String            @id @default(cuid())
+  name               String            @unique
+  active             Boolean           @default(true)
+  /// Match criteria `{ priorities?: string[], categories?: string[] }` — absent = match all.
+  appliesTo          Json              @default("{}")
+  /// Business minutes allowed for first response; null = no response target.
+  responseTargetMins Int?
+  /// Business minutes allowed to resolution; null = no resolution target.
+  resolveTargetMins  Int?
+  /// Percentage of the target at which the "approaching" warning fires.
+  warnPercent        Int               @default(75)
+  /// Null calendar = targets run on real (naive) time.
+  businessCalendarId String?
+  businessCalendar   BusinessCalendar? @relation(fields: [businessCalendarId], references: [id])
+  instances          SlaInstance[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
+
+/// One row per ticket × policy × target type. State is recomputed by the
+/// sweep and on ticket events — the row is a materialized indicator.
+model SlaInstance {
+  id              String          @id @default(cuid())
+  ticketId        String
+  ticket          Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  policyId        String
+  policy          SlaPolicy       @relation(fields: [policyId], references: [id])
+  type            SlaType
+  state           SlaState        @default(within)
+  startAt         DateTime
+  /// Target in business minutes (recomputed when priority/category changes).
+  targetMins      Int
+  pausedAt        DateTime?
+  /// Accumulated paused time in BUSINESS ms (converted on resume).
+  pausedMs        Int             @default(0)
+  /// First agent response instant (completes the `response` instance).
+  firstResponseAt DateTime?
+  completedAt     DateTime?
+  escalations     SlaEscalation[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([ticketId, policyId, type])
+  @@index([state])
+  @@index([ticketId])
+}
+
+/// Idempotency for escalation chains — the DB unique constraint makes double
+/// fires impossible even if the sweep races or retries.
+model SlaEscalation {
+  id           String      @id @default(cuid())
+  instanceId   String
+  instance     SlaInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  /// e.g. "approaching" | "breached"
+  thresholdKey String
+  firedAt      DateTime    @default(now())
+
+  @@unique([instanceId, thresholdKey])
+}
+
+/**
+ * ── Notifications ──────────────────────────────────────────────────────────
+ */
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  ticketId  String?
+  /// Unique per logical event — a retried job cannot create a duplicate.
+  dedupeKey String?   @unique
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([createdAt(sort: Desc)])
+}
+
+/// Per-user delivery preferences (per channel/category). Created on first read.
+model NotificationPreference {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inApp        Boolean  @default(true)
+  email        Boolean  @default(false)
+  slaWarnings  Boolean  @default(true)
+  slaBreaches  Boolean  @default(true)
+  ticketUpdate Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+}
+
+/// Append-only job execution log (successes and failures) for observability.
+model JobRun {
+  id        String   @id @default(cuid())
+  queue     String
+  name      String
+  jobId     String
+  status    String
+  attempts  Int      @default(1)
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
 }

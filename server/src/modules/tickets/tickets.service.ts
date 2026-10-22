@@ -2,12 +2,38 @@ import type { Prisma, Role, TicketStatus } from '@prisma/client';
 
 import { recordAudit } from '../../core/audit.js';
 import { badRequest, forbidden, notFound, conflict } from '../../core/errors.js';
+import { logger } from '../../core/logger.js';
 import { hasPermission, type Permission } from '../../core/permissions.js';
 import type { AuthedUser } from '../../core/request.js';
 import { prisma } from '../../prisma/client.js';
 import { calculatePriority } from '../settings/priorityMatrix.js';
 import { getSystemSettings } from '../settings/settings.routes.js';
 import { OPEN_STATUSES } from './tickets.statuses.js';
+import {
+  calendarToEngineInput,
+  cancelSlaForTicket,
+  completeResolutionSla,
+  deadlineFor,
+  elapsedMs,
+  ensureSlaInstances,
+  pauseSlaForTicket,
+  rearmResolutionSla,
+  recomputeSlaForTicket,
+  recordFirstResponse,
+  resumeSlaForTicket,
+} from '../../sla/sla.service.js';
+
+/**
+ * SLA bookkeeping never breaks (or rolls back) the ticket operation it trails —
+ * engine errors are logged and swallowed here.
+ */
+async function safeSla(hook: () => Promise<void>): Promise<void> {
+  try {
+    await hook();
+  } catch (err) {
+    logger.error('[sla] hook failed', err);
+  }
+}
 
 /** hasPermission with the auth-context role list (typed string[] → Role[]). */
 export function can(user: AuthedUser, permission: Permission): boolean {
@@ -171,6 +197,9 @@ export async function createTicket(
     targetId: ticket.id,
     meta: { number, priority },
   });
+  await safeSla(() =>
+    ensureSlaInstances({ id: ticket.id, priority: ticket.priority, category: ticket.category, createdAt: ticket.createdAt }),
+  );
   return ticket;
 }
 
@@ -275,11 +304,42 @@ export async function getTicket(user: AuthedUser, id: string) {
         orderBy: { createdAt: 'desc' },
         include: { uploadedBy: { select: { id: true, name: true } } },
       },
+      slaInstances: {
+        include: { policy: { select: { id: true, name: true, warnPercent: true, businessCalendarId: true } } },
+      },
     },
   });
   if (!ticket) throw notFound('Ticket not found');
   await assertCanView(user, ticket);
-  return ticket;
+
+  // Live SLA indicators (chips) — computed on read, no DB writes.
+  const sla = [];
+  for (const inst of ticket.slaInstances) {
+    const calendar = inst.policy.businessCalendarId
+      ? await calendarInputForPolicy(inst.policy.businessCalendarId)
+      : null;
+    const clock = inst.completedAt ?? new Date();
+    sla.push({
+      id: inst.id,
+      policyName: inst.policy.name,
+      type: inst.type,
+      state: inst.state,
+      targetMins: inst.targetMins,
+      elapsedMins: Math.floor(elapsedMs(inst, calendar, clock) / 60000),
+      deadlineAt: deadlineFor(inst, calendar).toISOString(),
+    });
+  }
+  const { slaInstances: _instances, ...rest } = ticket;
+  return { ...rest, sla };
+}
+
+async function calendarInputForPolicy(businessCalendarId: string) {
+  const cal = await prisma.businessCalendar.findUnique({
+    where: { id: businessCalendarId },
+    include: { workWindows: true, holidays: true },
+  });
+  if (!cal) return null;
+  return calendarToEngineInput(cal as unknown as Parameters<typeof calendarToEngineInput>[0]);
 }
 
 export async function assignTicket(
@@ -341,6 +401,8 @@ export async function assignTicket(
     targetId: id,
     meta: { number: ticket.number, assigneeId: input.assigneeId ?? null, groupId: input.groupId ?? null },
   });
+  // Assignment counts as first agent response for SLA purposes.
+  await safeSla(() => recordFirstResponse(id, new Date()));
   return updated;
 }
 
@@ -425,6 +487,14 @@ export async function transitionTicket(
       targetId: id,
       meta: { number: ticket.number, from: ticket.status, to: input.status },
     });
+    await safeSla(async () => {
+      if (input.status === 'canceled') return cancelSlaForTicket(id);
+      if (isReopen) return rearmResolutionSla(id, new Date());
+      if (input.status === 'resolved') return completeResolutionSla(id, new Date());
+      const settings = await getSystemSettings();
+      if (settings.slaPauseStates.includes(input.status)) return pauseSlaForTicket(id, new Date());
+      if (settings.slaPauseStates.includes(ticket.status)) return resumeSlaForTicket(id, new Date());
+    });
     return updated;
   } catch {
     throw conflict('Ticket was modified by someone else — reload and retry', 'STALE_VERSION');
@@ -491,6 +561,10 @@ export async function overridePriority(
     after: { impact, urgency, priority },
     meta: { number: ticket.number, reason: input.reason },
   });
+  // Priority changes re-evaluate policy matching and targets.
+  await safeSla(() =>
+    recomputeSlaForTicket({ id, priority, category: ticket.category, createdAt: ticket.createdAt }, user.id),
+  );
   return updated;
 }
 
@@ -510,10 +584,18 @@ export async function addComment(
     throw conflict('Cannot comment on a closed ticket');
   }
 
-  return prisma.ticketComment.create({
+  const comment = await prisma.ticketComment.create({
     data: { ticketId: id, authorId: user.id, body: input.body, isInternal: input.isInternal },
     include: { author: { select: { id: true, name: true } } },
   });
+
+  // First agent comment completes the response SLA (agents, not the requester).
+  const isAgent = can(user, 'tickets:update') || can(user, 'tickets:worknotes');
+  const isRequester = ticket.requesterId === user.employeeId;
+  if (isAgent && !isRequester) {
+    await safeSla(() => recordFirstResponse(id, new Date()));
+  }
+  return comment;
 }
 
 /** Queue counts for dashboard/header badges — scope-limited like the list. */
