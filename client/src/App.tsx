@@ -2,8 +2,15 @@ import { Route, Routes } from 'react-router-dom';
 
 import AppShell from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import AssetDetailPage from '@/pages/AssetDetailPage';
+import AssetsPage from '@/pages/AssetsPage';
+import AssignmentsPage from '@/pages/AssignmentsPage';
+import AuditsPage from '@/pages/AuditsPage';
 import DashboardPage from '@/pages/DashboardPage';
+import InventoryPage from '@/pages/InventoryPage';
+import LicensesPage from '@/pages/LicensesPage';
 import LoginPage from '@/pages/LoginPage';
+import MaintenancePage from '@/pages/MaintenancePage';
 import NotificationsPage from '@/pages/NotificationsPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 import TicketCreatePage from '@/pages/TicketCreatePage';
@@ -37,6 +44,48 @@ export default function App() {
             </ProtectedRoute>}
           />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route
+            path="assets"
+            element={<ProtectedRoute permissions={['assets:read']}>
+              <AssetsPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="assets/assignments"
+            element={<ProtectedRoute permissions={['assets:read']}>
+              <AssignmentsPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="assets/maintenance"
+            element={<ProtectedRoute permissions={['assets:read']}>
+              <MaintenancePage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="assets/inventory"
+            element={<ProtectedRoute permissions={['assets:read']}>
+              <InventoryPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="assets/licenses"
+            element={<ProtectedRoute permissions={['assets:read']}>
+              <LicensesPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="assets/audits"
+            element={<ProtectedRoute permissions={['assets:read']}>
+              <AuditsPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="assets/:id"
+            element={<ProtectedRoute permissions={['assets:read']}>
+              <AssetDetailPage />
+            </ProtectedRoute>}
+          />
           <Route
             path="approvals"
             element={<ProtectedRoute permissions={['approvals:decide']}>

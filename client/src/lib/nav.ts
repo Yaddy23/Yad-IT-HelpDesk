@@ -5,6 +5,7 @@ import {
   AuditIcon,
   BuildingIcon,
   DashboardIcon,
+  MonitorIcon,
   SettingsIcon,
   TicketIcon,
   UsersIcon,
@@ -22,6 +23,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: DashboardIcon, permissions: [], section: 'work' },
   { label: 'Tickets', to: '/tickets', icon: TicketIcon, permissions: ['tickets:read'], section: 'work' },
+  { label: 'Assets', to: '/assets', icon: MonitorIcon, permissions: ['assets:read'], section: 'work' },
   { label: 'Approvals', to: '/approvals', icon: ApprovalsIcon, permissions: ['approvals:decide'], section: 'work' },
   { label: 'Users', to: '/admin/users', icon: UsersIcon, permissions: ['users:manage'], section: 'admin' },
   { label: 'Organization', to: '/admin/org', icon: BuildingIcon, permissions: ['org:manage'], section: 'admin' },

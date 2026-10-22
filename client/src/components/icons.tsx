@@ -76,6 +76,13 @@ export const AuditIcon = (p: IconProps) => (
   </svg>
 );
 
+export const MonitorIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="2.5" y="4" width="19" height="13" rx="2" />
+    <path d="M8 21h8m-4-4v4" />
+  </svg>
+);
+
 export const SearchIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <circle cx="11" cy="11" r="7" />
