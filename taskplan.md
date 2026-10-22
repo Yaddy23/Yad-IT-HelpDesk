@@ -37,13 +37,13 @@ Process: superpowers (brainstorm → design → plan → phased build). After ea
 - ✅ Acceptance: brief tests 5–8, 22 (approaching→warning, breach→escalation, no dupes on retry) — `server/tests/sla.spec.ts` (12 integration tests; running)
 
 ## Phase 4 — Asset Management
-- [ ] Assets + lifecycle transitions; asset numbers; custodian; warranty
-- [ ] asset_assignments (append-only custody, acknowledgment, return/reassign/loan; unique active-assignment constraint)
-- [ ] Maintenance: schedules, records, costs, vendor repairs; warranty claims
-- [ ] Inventory: items, stock_movements (append-only), reorder alerts, negative-stock guard in-transaction
-- [ ] Software licenses: seats, license_assignments, entitlement guard (+documented override)
-- [ ] Asset audit sessions + items; asset reports
-- [ ] Client pages: all-assets/hardware/software/assignments/maintenance/warranty/inventory/audits
+- [x] Assets + lifecycle transitions; asset numbers; custodian; warranty
+- [x] asset_assignments (append-only custody, acknowledgment, return/reassign/loan; unique active-assignment constraint)
+- [x] Maintenance: schedules, records, costs, vendor repairs; warranty claims
+- [x] Inventory: items, stock_movements (append-only), reorder alerts, negative-stock guard in-transaction
+- [x] Software licenses: seats, license_assignments, entitlement guard (+documented override)
+- [x] Asset audit sessions + items; asset reports
+- [x] Client pages: all-assets/hardware/software/assignments/maintenance/warranty/inventory/audits
 - ✅ Acceptance: brief tests 15–19
 
 ## Phase 5 — Service Management
