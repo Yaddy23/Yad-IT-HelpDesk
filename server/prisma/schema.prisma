@@ -32,27 +32,35 @@ enum Role {
 }
 
 model User {
-  id                    String                  @id @default(cuid())
-  email                 String                  @unique
-  passwordHash          String
-  name                  String
-  active                Boolean                 @default(true)
-  employee              Employee?
-  roles                 UserRole[]
-  sessions              Session[]
-  managedGroups         AssignmentGroup[]       @relation("groupManager")
-  groupMemberships      AssignmentGroupMember[] @relation("groupMemberships")
-  auditEntries          AuditLog[]              @relation("auditActor")
-  settingsModifications SystemSettings[]        @relation("settingsModifier")
-  ticketComments        TicketComment[]         @relation("ticketComments")
-  ticketActivities      TicketActivity[]        @relation("ticketActivities")
-  assignmentsMade       TicketAssignment[]      @relation("assignmentsMade")
-  attachmentsUploaded   Attachment[]            @relation("attachmentUploader")
-  notifications         Notification[]
+  id                     String                   @id @default(cuid())
+  email                  String                   @unique
+  passwordHash           String
+  name                   String
+  active                 Boolean                  @default(true)
+  employee               Employee?
+  roles                  UserRole[]
+  sessions               Session[]
+  managedGroups          AssignmentGroup[]        @relation("groupManager")
+  groupMemberships       AssignmentGroupMember[]  @relation("groupMemberships")
+  auditEntries           AuditLog[]               @relation("auditActor")
+  settingsModifications  SystemSettings[]         @relation("settingsModifier")
+  ticketComments         TicketComment[]          @relation("ticketComments")
+  ticketActivities       TicketActivity[]         @relation("ticketActivities")
+  assignmentsMade        TicketAssignment[]       @relation("assignmentsMade")
+  attachmentsUploaded    Attachment[]             @relation("attachmentUploader")
+  notifications          Notification[]
   notificationPreference NotificationPreference?
-  lastLoginAt           DateTime?
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
+  assetsAssigned         AssetAssignment[]        @relation("assetAssigner")
+  maintenanceRecorded    AssetMaintenanceRecord[] @relation("maintenanceRecorder")
+  warrantyClaimsFiled    WarrantyClaim[]          @relation("warrantyClaimer")
+  stockMovementsMade     StockMovement[]          @relation("stockMover")
+  licensesAssigned       LicenseAssignment[]      @relation("licenseAssigner")
+  auditsStarted          AssetAuditSession[]      @relation("auditStarter")
+  auditsClosed           AssetAuditSession[]      @relation("auditCloser")
+  assetsChecked          AssetAuditItem[]         @relation("assetChecker")
+  lastLoginAt            DateTime?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
 
   @@index([active])
 }
@@ -94,28 +102,31 @@ enum EmploymentStatus {
 }
 
 model Employee {
-  id                 String             @id @default(cuid())
-  employeeId         String             @unique
-  userId             String?            @unique
-  user               User?              @relation(fields: [userId], references: [id])
+  id                 String              @id @default(cuid())
+  employeeId         String              @unique
+  userId             String?             @unique
+  user               User?               @relation(fields: [userId], references: [id])
   name               String
   email              String
   departmentId       String?
-  department         Department?        @relation("deptEmployees", fields: [departmentId], references: [id])
+  department         Department?         @relation("deptEmployees", fields: [departmentId], references: [id])
   jobTitle           String?
   managerId          String?
-  manager            Employee?          @relation("mgrReports", fields: [managerId], references: [id])
-  reports            Employee[]         @relation("mgrReports")
+  manager            Employee?           @relation("mgrReports", fields: [managerId], references: [id])
+  reports            Employee[]          @relation("mgrReports")
   locationId         String?
-  location           Location?          @relation(fields: [locationId], references: [id])
-  employmentStatus   EmploymentStatus   @default(active)
+  location           Location?           @relation(fields: [locationId], references: [id])
+  employmentStatus   EmploymentStatus    @default(active)
   phone              String?
-  managedDepartments Department[]       @relation("deptManager")
-  requestedTickets   Ticket[]           @relation("ticketRequester")
-  assignedTickets    Ticket[]           @relation("ticketAssignee")
-  assignmentHistory  TicketAssignment[] @relation("assignmentAssignee")
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  managedDepartments Department[]        @relation("deptManager")
+  requestedTickets   Ticket[]            @relation("ticketRequester")
+  assignedTickets    Ticket[]            @relation("ticketAssignee")
+  assignmentHistory  TicketAssignment[]  @relation("assignmentAssignee")
+  custodianAssets    Asset[]             @relation("assetCustodian")
+  assetAssignments   AssetAssignment[]   @relation("assetAssignee")
+  licenseAssignments LicenseAssignment[] @relation("licenseAssignee")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([departmentId])
   @@index([locationId])
@@ -134,22 +145,25 @@ model Department {
   timezone         String           @default("UTC")
   supportGroupId   String?
   supportGroup     AssignmentGroup? @relation("deptSupport", fields: [supportGroupId], references: [id])
+  assets           Asset[]          @relation("assetDepartment")
   active           Boolean          @default(true)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 }
 
 model Location {
-  id          String       @id @default(cuid())
-  name        String
-  code        String       @unique
-  address     String?
-  timezone    String       @default("UTC")
-  active      Boolean      @default(true)
-  employees   Employee[]
-  departments Department[] @relation("deptOffice")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id             String          @id @default(cuid())
+  name           String
+  code           String          @unique
+  address        String?
+  timezone       String          @default("UTC")
+  active         Boolean         @default(true)
+  employees      Employee[]
+  departments    Department[]    @relation("deptOffice")
+  assets         Asset[]         @relation("assetLocation")
+  inventoryItems InventoryItem[] @relation("inventoryLocation")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 enum GroupRole {
@@ -544,4 +558,336 @@ model JobRun {
 
   @@index([name, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
+}
+
+/**
+ * ── Asset management (Phase 4) ─────────────────────────────────────────────
+ * Individually-tracked assets with a lifecycle (in_stock → deployed → …),
+ * append-only custody assignments (one ACTIVE assignment per asset, enforced
+ * at the DB level via the nullable-unique activeKey column), maintenance
+ * schedules/records with vendor repairs, warranty claims, consumable
+ * inventory with append-only stock movements, software license seats, and
+ * physical audit sessions.
+ */
+
+enum AssetCategory {
+  hardware
+  mobile
+  peripheral
+  network
+  appliance
+  other
+}
+
+enum AssetStatus {
+  in_stock
+  deployed
+  in_repair
+  in_maintenance
+  retired
+  lost
+}
+
+model AssetCounter {
+  key  String @id @default("AST")
+  next Int    @default(1)
+}
+
+model Asset {
+  id             String        @id @default(cuid())
+  /// Human number, e.g. AST-2026-000001.
+  number         String        @unique
+  name           String
+  category       AssetCategory @default(hardware)
+  status         AssetStatus   @default(in_stock)
+  manufacturer   String?
+  model          String?
+  serialNumber   String?
+  purchasedAt    DateTime?
+  purchaseCost   Float?
+  warrantyExpiry DateTime?
+  notes          String?
+
+  custodianId  String?
+  custodian    Employee?   @relation("assetCustodian", fields: [custodianId], references: [id])
+  locationId   String?
+  location     Location?   @relation("assetLocation", fields: [locationId], references: [id])
+  departmentId String?
+  department   Department? @relation("assetDepartment", fields: [departmentId], references: [id])
+  vendorId     String?
+  vendor       Vendor?     @relation("assetVendor", fields: [vendorId], references: [id])
+
+  assignments          AssetAssignment[]
+  maintenanceRecords   AssetMaintenanceRecord[]
+  maintenanceSchedules MaintenanceSchedule[]
+  warrantyClaims       WarrantyClaim[]
+  auditItems           AssetAuditItem[]
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  @@index([status])
+  @@index([category])
+  @@index([custodianId])
+  @@index([locationId])
+}
+
+enum AssetAssignmentStatus {
+  active
+  returned
+}
+
+/// Append-only custody history. `activeKey` is the DB-level "one active
+/// assignment per asset" constraint: set to the assetId while the assignment
+/// is active, NULL once returned (a nullable-unique column is Prisma's
+/// equivalent of a partial unique index).
+model AssetAssignment {
+  id             String                @id @default(cuid())
+  assetId        String
+  asset          Asset                 @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       Employee              @relation("assetAssignee", fields: [employeeId], references: [id])
+  status         AssetAssignmentStatus @default(active)
+  assignedById   String
+  assignedBy     User                  @relation("assetAssigner", fields: [assignedById], references: [id])
+  assignedAt     DateTime              @default(now())
+  /// Loans carry a due-back date.
+  dueAt          DateTime?
+  acknowledgedAt DateTime?
+  returnedAt     DateTime?
+  returnNote     String?
+  note           String?
+  activeKey      String?               @unique
+
+  @@index([assetId, assignedAt(sort: Desc)])
+  @@index([employeeId, status])
+}
+
+/// Recurring maintenance plan for an asset (e.g. "every 90 days").
+model MaintenanceSchedule {
+  id              String    @id @default(cuid())
+  assetId         String
+  asset           Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  name            String
+  intervalDays    Int
+  active          Boolean   @default(true)
+  nextDueAt       DateTime
+  lastCompletedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  records AssetMaintenanceRecord[]
+
+  @@index([assetId])
+  @@index([nextDueAt])
+}
+
+enum MaintenanceType {
+  preventive
+  repair
+  inspection
+  upgrade
+}
+
+/// Append-only maintenance history, including vendor repairs (vendorId set).
+model AssetMaintenanceRecord {
+  id          String               @id @default(cuid())
+  assetId     String
+  asset       Asset                @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  scheduleId  String?
+  schedule    MaintenanceSchedule? @relation(fields: [scheduleId], references: [id])
+  type        MaintenanceType      @default(preventive)
+  performedAt DateTime             @default(now())
+  summary     String
+  cost        Float?
+  vendorId    String?
+  vendor      Vendor?              @relation("maintenanceVendor", fields: [vendorId], references: [id])
+  performedBy String? /// free-text technician name for external work
+  createdById String
+  createdBy   User                 @relation("maintenanceRecorder", fields: [createdById], references: [id])
+  createdAt   DateTime             @default(now())
+
+  @@index([assetId, performedAt(sort: Desc)])
+}
+
+enum WarrantyClaimStatus {
+  open
+  submitted
+  approved
+  rejected
+  resolved
+}
+
+model WarrantyClaim {
+  id          String              @id @default(cuid())
+  assetId     String
+  asset       Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  vendorId    String?
+  vendor      Vendor?             @relation("warrantyVendor", fields: [vendorId], references: [id])
+  issue       String
+  claimedAt   DateTime            @default(now())
+  status      WarrantyClaimStatus @default(open)
+  resolution  String?
+  resolvedAt  DateTime?
+  createdById String
+  createdBy   User                @relation("warrantyClaimer", fields: [createdById], references: [id])
+  createdAt   DateTime            @default(now())
+
+  @@index([assetId])
+  @@index([status])
+}
+
+/// Third-party vendor (repairs, warranty, purchases).
+model Vendor {
+  id             String                   @id @default(cuid())
+  name           String
+  contact        String?
+  email          String?
+  phone          String?
+  notes          String?
+  active         Boolean                  @default(true)
+  assets         Asset[]                  @relation("assetVendor")
+  maintenance    AssetMaintenanceRecord[] @relation("maintenanceVendor")
+  warrantyClaims WarrantyClaim[]          @relation("warrantyVendor")
+  licenses       SoftwareLicense[]        @relation("licenseVendor")
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+}
+
+enum StockMovementType {
+  in
+  out
+  adjust
+}
+
+/// Consumable inventory. `quantity` is maintained transactionally alongside
+/// append-only movements; a movement that would take it negative is blocked
+/// in-transaction.
+model InventoryItem {
+  id           String    @id @default(cuid())
+  name         String
+  sku          String?   @unique
+  category     String?
+  unit         String    @default("pcs")
+  quantity     Int       @default(0)
+  reorderPoint Int       @default(0)
+  unitCost     Float?
+  locationId   String?
+  location     Location? @relation("inventoryLocation", fields: [locationId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  movements StockMovement[]
+
+  @@index([quantity])
+}
+
+/// Append-only stock history. `delta` is signed (+in/−out); `adjust` sets the
+/// level to `resultingQuantity` (delta = new − old).
+model StockMovement {
+  id                String            @id @default(cuid())
+  itemId            String
+  item              InventoryItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  type              StockMovementType
+  delta             Int
+  resultingQuantity Int
+  reason            String
+  ticketId          String? /// consumed by a ticket, optional link
+  createdById       String
+  createdBy         User              @relation("stockMover", fields: [createdById], references: [id])
+  createdAt         DateTime          @default(now())
+
+  @@index([itemId, createdAt(sort: Desc)])
+}
+
+enum LicenseType {
+  perpetual
+  subscription
+  oem
+  volume
+}
+
+model SoftwareLicense {
+  id         String      @id @default(cuid())
+  name       String
+  vendorId   String?
+  vendor     Vendor?     @relation("licenseVendor", fields: [vendorId], references: [id])
+  licenseKey String?
+  type       LicenseType @default(perpetual)
+  seats      Int         @default(1)
+  expiresAt  DateTime?
+  cost       Float?
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  assignments LicenseAssignment[]
+
+  @@index([expiresAt])
+}
+
+enum LicenseAssignmentStatus {
+  active
+  returned
+}
+
+/// Seat assignment; same nullable-unique trick as AssetAssignment — at most
+/// one active assignment per (license, employee) and seat count checked
+/// transactionally at assignment time.
+model LicenseAssignment {
+  id           String                  @id @default(cuid())
+  licenseId    String
+  license      SoftwareLicense         @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee                @relation("licenseAssignee", fields: [employeeId], references: [id])
+  status       LicenseAssignmentStatus @default(active)
+  assignedById String
+  assignedBy   User                    @relation("licenseAssigner", fields: [assignedById], references: [id])
+  assignedAt   DateTime                @default(now())
+  returnedAt   DateTime?
+  note         String?
+  activeKey    String?                 @unique
+
+  @@index([licenseId, status])
+  @@index([employeeId])
+}
+
+enum AssetAuditItemStatus {
+  found
+  missing
+  unexpected
+}
+
+/// A physical audit: open a session scoped to a location/department, mark each
+/// expected asset found/missing, close the session (missing assets flagged).
+model AssetAuditSession {
+  id          String    @id @default(cuid())
+  name        String
+  status      String    @default("open") /// open | closed
+  scopeType   String? /// location | department | all
+  scopeId     String?
+  startedById String
+  startedBy   User      @relation("auditStarter", fields: [startedById], references: [id])
+  startedAt   DateTime  @default(now())
+  closedAt    DateTime?
+  closedById  String?
+  closedBy    User?     @relation("auditCloser", fields: [closedById], references: [id])
+
+  items AssetAuditItem[]
+
+  @@index([status, startedAt(sort: Desc)])
+}
+
+model AssetAuditItem {
+  id          String                @id @default(cuid())
+  sessionId   String
+  session     AssetAuditSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  assetId     String
+  asset       Asset                 @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  status      AssetAuditItemStatus?
+  checkedById String?
+  checkedBy   User?                 @relation("assetChecker", fields: [checkedById], references: [id])
+  checkedAt   DateTime?
+  note        String?
+
+  @@unique([sessionId, assetId])
 }

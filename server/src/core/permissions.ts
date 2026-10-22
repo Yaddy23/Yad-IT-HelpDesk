@@ -20,6 +20,11 @@ export const PERMISSIONS = {
   'tickets:worknotes': 'Add internal work notes',
   // approvals
   'approvals:decide': 'Act on approval requests',
+  // assets (Phase 4)
+  'assets:read': 'View assets and their history',
+  'assets:create': 'Create assets and inventory/licenses/audit records',
+  'assets:update': 'Update assets, lifecycle transitions, maintenance and warranty',
+  'assets:assign': 'Assign/return assets, licenses and stock',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -39,6 +44,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'tickets:close',
     'tickets:worknotes',
     'approvals:decide',
+    'assets:read',
+    'assets:create',
+    'assets:update',
+    'assets:assign',
   ],
   it_manager: [
     'tickets:read',
@@ -48,8 +57,20 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'tickets:close',
     'tickets:worknotes',
     'approvals:decide',
+    'assets:read',
+    'assets:create',
+    'assets:update',
+    'assets:assign',
   ],
-  it_technician: ['tickets:read', 'tickets:update', 'tickets:worknotes', 'tickets:resolve'],
+  it_technician: [
+    'tickets:read',
+    'tickets:update',
+    'tickets:worknotes',
+    'tickets:resolve',
+    'assets:read',
+    'assets:update',
+    'assets:assign',
+  ],
   employee: EMPLOYEE_BASE,
   approver: ['approvals:decide'],
 };

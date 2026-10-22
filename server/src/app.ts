@@ -16,6 +16,10 @@ import { ticketsRouter } from './modules/tickets/tickets.routes.js';
 import { searchRouter } from './modules/search/search.routes.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 import { slaRouter } from './modules/sla/sla.routes.js';
+import { assetsRouter, vendorsRouter } from './modules/assets/assets.routes.js';
+import { inventoryRouter } from './modules/inventory/inventory.routes.js';
+import { licensesRouter } from './modules/licenses/licenses.routes.js';
+import { assetAuditsRouter } from './modules/audits/audits.routes.js';
 export function createApp(): Express {
   const app = express();
 
@@ -46,6 +50,11 @@ export function createApp(): Express {
   app.use('/api/v1/search', searchRouter);
   app.use('/api/v1/notifications', notificationsRouter);
   app.use('/api/v1/sla-policies', slaRouter);
+  app.use('/api/v1/assets', assetsRouter);
+  app.use('/api/v1/vendors', vendorsRouter);
+  app.use('/api/v1/inventory', inventoryRouter);
+  app.use('/api/v1/licenses', licensesRouter);
+  app.use('/api/v1/asset-audits', assetAuditsRouter);
 
   // SPA fallback for client-side routing — only for non-API GET requests.
   app.get(/^(?!\/api\/).*/, (_req, res) => {
