@@ -5,6 +5,7 @@ import { getRedis, redisEnabled } from '../core/redis.js';
 import { prisma } from '../prisma/client.js';
 import { sendEmail } from '../modules/notifications/email.js';
 import { runSlaSweep } from '../sla/sla.service.js';
+import { runApprovalSweep } from '../modules/serviceMgmt/approvals.service.js';
 
 /**
  * Job scheduler with two interchangeable backends:
@@ -53,6 +54,7 @@ async function startBullMq(): Promise<void> {
       try {
         if (job.name === SWEEP_JOB) {
           const result = await runSlaSweep();
+          await runApprovalSweep();
           await scheduleThresholdWakeUp(result.nextWakeUpMs, `wake:${job.id ?? 'repeat'}`);
         } else if (job.name === EMAIL_JOB) {
           const payload = job.data as EmailJobPayload;
@@ -98,6 +100,7 @@ async function scheduleThresholdWakeUp(delayMs: number | null, dedupeKey: string
     void (async () => {
       try {
         await runSlaSweep();
+        await runApprovalSweep();
         await recordJobRun('memory', SWEEP_JOB, dedupeKey, 'completed', 1);
       } catch (err) {
         await recordJobRun('memory', SWEEP_JOB, dedupeKey, 'failed', 1, String(err));
@@ -117,6 +120,7 @@ function startInMemory(): void {
     void (async () => {
       try {
         const result = await runSlaSweep();
+        await runApprovalSweep();
         await scheduleThresholdWakeUp(result.nextWakeUpMs, `wake:${SWEEP_JOB}:repeat`);
         await recordJobRun('memory', SWEEP_JOB, `${SWEEP_JOB}:repeat`, 'completed', 1);
       } catch (err) {

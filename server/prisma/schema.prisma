@@ -58,6 +58,8 @@ model User {
   auditsStarted          AssetAuditSession[]      @relation("auditStarter")
   auditsClosed           AssetAuditSession[]      @relation("auditCloser")
   assetsChecked          AssetAuditItem[]         @relation("assetChecker")
+  approvalsRequested     ApprovalRequest[]        @relation("approvalsRequested")
+  approvalDecisions      ApprovalDecision[]       @relation("approvalDecisions")
   lastLoginAt            DateTime?
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
@@ -125,6 +127,7 @@ model Employee {
   custodianAssets    Asset[]             @relation("assetCustodian")
   assetAssignments   AssetAssignment[]   @relation("assetAssignee")
   licenseAssignments LicenseAssignment[] @relation("licenseAssignee")
+  serviceRequests    ServiceRequest[]    @relation("srRequester")
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -890,4 +893,153 @@ model AssetAuditItem {
   note        String?
 
   @@unique([sessionId, assetId])
+}
+
+/**
+ * ── Service management (Phase 5) ─────────────────────────────────────────────
+ * Catalog items define requestable services (jsonb form schemas — the one
+ * genuinely schemaless place). Submitting a request instantiates approval
+ * steps from the item's rule; decisions are append-only and the DB-unique
+ * (request, step, approver) constraint makes duplicate decisions impossible.
+ * `in_fulfillment` is reachable ONLY from an approved approval request —
+ * the service-layer gate plus the state machine both enforce it.
+ */
+
+enum ServiceRequestStatus {
+  pending_approval
+  info_requested
+  in_fulfillment
+  fulfilled
+  rejected
+  canceled
+}
+
+model CatalogItem {
+  id           String           @id @default(cuid())
+  name         String
+  description  String?
+  category     String?
+  icon         String?
+  sortOrder    Int              @default(0)
+  active       Boolean          @default(true)
+  /// Eligibility `{ departments?: id[], locations?: id[], roles?: Role[] }` —
+  /// absent/empty = everyone may request.
+  eligibility  Json?
+  /// Field definitions `[{ name, label, type, required?, options?, help? }]`.
+  formSchema   Json
+  requests     ServiceRequest[]
+  approvalRule ApprovalRule?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+model ServiceRequestCounter {
+  key  String @id @default("SR")
+  next Int    @default(1)
+}
+
+model ServiceRequest {
+  id                String               @id @default(cuid())
+  /// Human number, e.g. SR-2026-000001.
+  number            String               @unique
+  catalogItemId     String
+  catalogItem       CatalogItem          @relation(fields: [catalogItemId], references: [id])
+  requesterId       String
+  requester         Employee             @relation("srRequester", fields: [requesterId], references: [id])
+  status            ServiceRequestStatus @default(pending_approval)
+  /// Form answers, validated against the item's formSchema at submission.
+  answers           Json
+  /// Info-request rounds `[{ round, note, at }]` appended per cycle.
+  infoRequests      Json?
+  approval          ApprovalRequest?     @relation(fields: [approvalRequestId], references: [id])
+  rejectionReason   String?
+  fulfilledAt       DateTime?
+  fulfillNote       String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  /// One approval per request — enforced at the DB level.
+  approvalRequestId String? @unique
+
+  @@index([status])
+  @@index([requesterId, createdAt(sort: Desc)])
+}
+
+enum ApprovalStepMode {
+  single
+  all
+  any
+  sequential
+}
+
+enum ApprovalRequestStatus {
+  pending
+  approved
+  rejected
+  canceled
+}
+
+enum DecisionValue {
+  approved
+  rejected
+  info_requested
+}
+
+/// One rule per catalog item (nullable-unique). Steps are authored as jsonb:
+/// `[{ name, mode, approver: { type: user|manager|role, value? }, deadlineHours? }]`
+/// and instantiated onto each request at submission.
+model ApprovalRule {
+  id            String       @id @default(cuid())
+  name          String
+  catalogItemId String?      @unique
+  catalogItem   CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  steps         Json
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model ApprovalRequest {
+  id              String                @id @default(cuid())
+  /// Extensible: 'service_request' today, 'change' when Phase 5 change mgmt lands.
+  targetType      String                @default("service_request")
+  targetId        String
+  status          ApprovalRequestStatus @default(pending)
+  /// Instantiated steps, ordered. Completion advances `currentStep`.
+  steps           Json
+  currentStep     Int                   @default(0)
+  requestedById   String
+  requestedBy     User                  @relation("approvalsRequested", fields: [requestedById], references: [id])
+  /// Delegations `{ [stepIndex]: delegateUserId }` — the delegate decides in the
+  /// original candidate's place; the decision row records who actually decided.
+  delegations     Json?
+  decidedAt       DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  decisions       ApprovalDecision[]
+  serviceRequests ServiceRequest[]
+
+  @@index([targetType, targetId])
+  @@index([status])
+}
+
+/// Append-only. Unique (request, step, approver) — a duplicated decision
+/// (retry, double-click, racing tab) is impossible at the DB level.
+model ApprovalDecision {
+  id         String          @id @default(cuid())
+  requestId  String
+  request    ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  stepIndex  Int
+  approverId String
+  approver   User            @relation("approvalDecisions", fields: [approverId], references: [id])
+  decision   DecisionValue
+  reason     String?
+  createdAt  DateTime        @default(now())
+
+  /// Uniqueness is a PARTIAL index (migration 20261023110000): one terminal
+  /// decision (approved/rejected) per (request, step, approver), while
+  /// info_requested rows may stack as the info-round history.
+  @@index([requestId, stepIndex, approverId])
+  @@index([approverId])
 }

@@ -20,6 +20,8 @@ export const PERMISSIONS = {
   'tickets:worknotes': 'Add internal work notes',
   // approvals
   'approvals:decide': 'Act on approval requests',
+  // service catalog (Phase 5)
+  'catalog:manage': 'Manage the service catalog, its forms and approval rules',
   // assets (Phase 4)
   'assets:read': 'View assets and their history',
   'assets:create': 'Create assets and inventory/licenses/audit records',
@@ -36,6 +38,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   it_admin: [
     'org:manage',
     'settings:manage',
+    'catalog:manage',
     'tickets:create',
     'tickets:read',
     'tickets:update',

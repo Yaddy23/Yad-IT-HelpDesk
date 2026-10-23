@@ -226,6 +226,76 @@ async function main() {
     }
   }
 
+  // Service catalog demo items (only when the catalog is empty)
+  const catalogCount = await prisma.catalogItem.count();
+  if (catalogCount === 0) {
+    await prisma.catalogItem.create({
+      data: {
+        name: 'Password reset',
+        description: 'Reset the password on your workstation or VPN account. No approval needed — handled by the service desk.',
+        category: 'Account access',
+        icon: 'key',
+        sortOrder: 10,
+        formSchema: [
+          { name: 'accountType', label: 'Which account?', type: 'select', required: true, options: ['Workstation login', 'VPN', 'Email'] },
+          { name: 'notes', label: 'Anything the service desk should know?', type: 'text', required: false },
+        ] as never,
+      },
+    });
+
+    const laptop = await prisma.catalogItem.create({
+      data: {
+        name: 'New laptop',
+        description: 'Request a standard business laptop. Requires your manager’s approval.',
+        category: 'Hardware',
+        icon: 'laptop',
+        sortOrder: 20,
+        formSchema: [
+          { name: 'device', label: 'Device type', type: 'select', required: true, options: ['Laptop 14"', 'Laptop 16"', 'Workstation'] },
+          { name: 'justification', label: 'Business justification', type: 'textarea', required: true, help: 'Why do you need this equipment?' },
+          { name: 'neededBy', label: 'Needed by', type: 'date', required: false },
+        ] as never,
+      },
+    });
+    await prisma.approvalRule.create({
+      data: {
+        name: 'Manager approval — laptops',
+        catalogItemId: laptop.id,
+        steps: [
+          { name: 'Manager sign-off', mode: 'single', approver: { type: 'manager' }, deadlineHours: 48 },
+        ] as never,
+      },
+    });
+
+    const access = await prisma.catalogItem.create({
+      data: {
+        name: 'System access request',
+        description: 'Request access to a business system. Needs your manager and then IT administration.',
+        category: 'Account access',
+        icon: 'shield',
+        sortOrder: 30,
+        formSchema: [
+          { name: 'system', label: 'System', type: 'select', required: true, options: ['Finance system', 'CRM', 'HR portal', 'Data warehouse'] },
+          { name: 'accessLevel', label: 'Access level', type: 'select', required: true, options: ['Read-only', 'Standard user', 'Power user'] },
+          { name: 'justification', label: 'Business justification', type: 'textarea', required: true },
+          { name: 'startDate', label: 'Access needed from', type: 'date', required: true },
+        ] as never,
+      },
+    });
+    await prisma.approvalRule.create({
+      data: {
+        name: 'Sequential — manager then IT admin',
+        catalogItemId: access.id,
+        steps: [
+          { name: 'Manager sign-off', mode: 'single', approver: { type: 'manager' }, deadlineHours: 48 },
+          { name: 'IT administration', mode: 'single', approver: { type: 'role', value: 'it_admin' }, deadlineHours: 72 },
+        ] as never,
+      },
+    });
+
+    console.log('   Seeded 3 catalog items (password reset, new laptop w/ manager approval, system access w/ 2-step approval).');
+  }
+
   console.log('✅ Seed complete. DEMO accounts (password: %s):', DEMO_PASSWORD);
   for (const u of demoUsers) console.log(`   - ${u.email}  (${u.roles.join(', ')})`);
   console.log('   Default calendar:', defaultCalendar.name);
