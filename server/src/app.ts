@@ -9,7 +9,7 @@ import { apiLimiter } from './core/rateLimit.js';
 import { requestLogger, sanitizeBody } from './core/requestLogger.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
-import { departmentsRouter, groupsRouter, locationsRouter } from './modules/org/org.routes.js';
+import { departmentsRouter, groupsRouter, locationsRouter, orgRouter } from './modules/org/org.routes.js';
 import { settingsRouter } from './modules/settings/settings.routes.js';
 import { auditRouter } from './modules/audit/audit.routes.js';
 import { ticketsRouter } from './modules/tickets/tickets.routes.js';
@@ -41,6 +41,7 @@ export function createApp(): Express {
   app.use('/api/v1', apiLimiter);
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/users', usersRouter);
+  app.use('/api/v1/org', orgRouter);
   app.use('/api/v1/departments', departmentsRouter);
   app.use('/api/v1/locations', locationsRouter);
   app.use('/api/v1/groups', groupsRouter);

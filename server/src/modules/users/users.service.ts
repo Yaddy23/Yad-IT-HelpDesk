@@ -14,7 +14,10 @@ const userPublicSelect = {
   lastLoginAt: true,
   createdAt: true,
   roles: { select: { role: true } },
-  employee: { select: { id: true, employeeId: true, name: true, jobTitle: true, departmentId: true, locationId: true } },
+  // managerId is part of the list payload: the admin edit form prefills from it.
+  employee: {
+    select: { id: true, employeeId: true, name: true, jobTitle: true, departmentId: true, locationId: true, managerId: true },
+  },
 } satisfies Prisma.UserSelect;
 
 type PublicUser = Prisma.UserGetPayload<{ select: typeof userPublicSelect }>;
@@ -73,15 +76,16 @@ export async function getUser(id: string) {
   return strip(user);
 }
 
+/** `null` on an optional reference means "explicitly none" (a cleared form field). */
 export interface CreateUserInput {
   email: string;
   name: string;
   password: string;
   roles: Role[];
-  jobTitle?: string;
-  departmentId?: string;
-  locationId?: string;
-  managerEmployeeId?: string;
+  jobTitle?: string | null;
+  departmentId?: string | null;
+  locationId?: string | null;
+  managerEmployeeId?: string | null;
 }
 
 export async function createUser(req: AuthedRequest, input: CreateUserInput) {
@@ -131,10 +135,10 @@ export interface UpdateUserInput {
   name?: string;
   roles?: Role[];
   active?: boolean;
-  jobTitle?: string;
-  departmentId?: string;
-  locationId?: string;
-  managerEmployeeId?: string;
+  jobTitle?: string | null;
+  departmentId?: string | null;
+  locationId?: string | null;
+  managerEmployeeId?: string | null;
 }
 
 /** Role changes are the canonical privilege-escalation vector — always audited with before/after. */

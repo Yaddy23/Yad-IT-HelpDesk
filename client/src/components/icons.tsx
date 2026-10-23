@@ -83,6 +83,12 @@ export const MonitorIcon = (p: IconProps) => (
   </svg>
 );
 
+export const ChevronIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m9 18 6-6-6-6" />
+  </svg>
+);
+
 export const SearchIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <circle cx="11" cy="11" r="7" />

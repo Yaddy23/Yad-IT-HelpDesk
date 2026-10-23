@@ -21,6 +21,16 @@ function paged<T>(items: T[], page: number, limit: number, total: number) {
   return { data: items, page, pages: Math.ceil(total / limit) || 1, total };
 }
 
+/*
+ * Empty-string conventions for optional form fields:
+ *  - a blank reference or free-text field means "no value" → null (nullable
+ *    columns only; writing '' would violate the foreign key)
+ *  - a blank field with a server default means "leave it alone" → undefined
+ */
+const optionalRef = z.string().max(120).optional().transform((v) => (v === '' ? null : v));
+const optionalText = z.string().max(300).optional().transform((v) => (v === '' ? null : v));
+const optionalTimezone = z.string().max(60).optional().transform((v) => (v === '' ? undefined : v));
+
 async function audit(
   req: AuthedRequest,
   action: string,
@@ -39,15 +49,62 @@ async function audit(
   });
 }
 
+/* ── Picker options ───────────────────────────────────────────────────────── */
+
+export const orgRouter = Router();
+orgRouter.use(requireAuth);
+
+/**
+ * Dropdown data for the organization screens. Deliberately separate from
+ * `/users/options`: that endpoint requires `users:manage`, which `it_admin` —
+ * the role that holds `org:manage` — does not carry.
+ */
+orgRouter.get('/options', requirePermission('org:manage'), async (_req, res, next) => {
+  try {
+    const [employees, departments, locations, supportGroups, users] = await Promise.all([
+      prisma.employee.findMany({
+        where: { employmentStatus: 'active' },
+        select: { id: true, employeeId: true, name: true },
+        orderBy: { name: 'asc' },
+        take: 500,
+      }),
+      prisma.department.findMany({
+        where: { active: true },
+        select: { id: true, name: true, code: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.location.findMany({
+        where: { active: true },
+        select: { id: true, name: true, code: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.assignmentGroup.findMany({
+        where: { active: true },
+        select: { id: true, name: true, code: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.user.findMany({
+        where: { active: true },
+        select: { id: true, name: true, email: true },
+        orderBy: { name: 'asc' },
+        take: 500,
+      }),
+    ]);
+    res.json({ data: { employees, departments, locations, supportGroups, users } });
+  } catch (e) {
+    next(e);
+  }
+});
+
 /* ── Departments ──────────────────────────────────────────────────────────── */
 
 const departmentSchema = z.object({
   name: z.string().min(2).max(120),
   code: z.string().min(2).max(20).transform((s) => s.toUpperCase()),
-  managerId: z.string().optional(),
-  officeLocationId: z.string().optional(),
-  timezone: z.string().max(60).optional(),
-  supportGroupId: z.string().optional(),
+  managerId: optionalRef,
+  officeLocationId: optionalRef,
+  timezone: optionalTimezone,
+  supportGroupId: optionalRef,
   active: z.boolean().optional(),
 });
 
@@ -103,8 +160,8 @@ departmentsRouter.patch('/:id', requirePermission('org:manage'), async (req, res
 const locationSchema = z.object({
   name: z.string().min(2).max(120),
   code: z.string().min(2).max(20).transform((s) => s.toUpperCase()),
-  address: z.string().max(300).optional(),
-  timezone: z.string().max(60).optional(),
+  address: optionalText,
+  timezone: optionalTimezone,
   active: z.boolean().optional(),
 });
 
@@ -154,8 +211,8 @@ locationsRouter.patch('/:id', requirePermission('org:manage'), async (req, res, 
 const groupSchema = z.object({
   name: z.string().min(2).max(120),
   code: z.string().min(2).max(20).transform((s) => s.toUpperCase()),
-  description: z.string().max(500).optional(),
-  managerId: z.string().optional(),
+  description: z.string().max(500).optional().transform((v) => (v === '' ? null : v)),
+  managerId: optionalRef,
   memberIds: z.array(z.string()).max(200).optional(),
   active: z.boolean().optional(),
 });

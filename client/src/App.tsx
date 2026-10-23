@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import AssetDetailPage from '@/pages/AssetDetailPage';
 import AssetsPage from '@/pages/AssetsPage';
 import AssignmentsPage from '@/pages/AssignmentsPage';
+import AuditLogPage from '@/pages/AuditLogPage';
 import AuditsPage from '@/pages/AuditsPage';
 import DashboardPage from '@/pages/DashboardPage';
 import InventoryPage from '@/pages/InventoryPage';
@@ -12,10 +13,12 @@ import LicensesPage from '@/pages/LicensesPage';
 import LoginPage from '@/pages/LoginPage';
 import MaintenancePage from '@/pages/MaintenancePage';
 import NotificationsPage from '@/pages/NotificationsPage';
+import OrganizationPage from '@/pages/OrganizationPage';
 import PlaceholderPage from '@/pages/PlaceholderPage';
 import TicketCreatePage from '@/pages/TicketCreatePage';
 import TicketDetailPage from '@/pages/TicketDetailPage';
 import TicketsPage from '@/pages/TicketsPage';
+import UsersPage from '@/pages/UsersPage';
 
 export default function App() {
   return (
@@ -95,13 +98,13 @@ export default function App() {
           <Route
             path="admin/users"
             element={<ProtectedRoute permissions={['users:manage']}>
-              <PlaceholderPage title="User Administration" phase="Phase 2 polish" />
+              <UsersPage />
             </ProtectedRoute>}
           />
           <Route
             path="admin/org"
             element={<ProtectedRoute permissions={['org:manage']}>
-              <PlaceholderPage title="Organization" phase="Phase 2 polish" />
+              <OrganizationPage />
             </ProtectedRoute>}
           />
           <Route
@@ -113,7 +116,7 @@ export default function App() {
           <Route
             path="admin/audit"
             element={<ProtectedRoute permissions={['audit:read']}>
-              <PlaceholderPage title="Audit Log" phase="Phase 2 polish" />
+              <AuditLogPage />
             </ProtectedRoute>}
           />
           <Route path="*" element={<PlaceholderPage title="Not found" phase="—" />} />

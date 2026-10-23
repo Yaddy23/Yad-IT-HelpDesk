@@ -9,16 +9,27 @@ const roleEnum = z.enum([
   'approver',
 ] as const);
 
+/**
+ * An empty string from a form's optional select/text field means "no value".
+ * Mapping it to null (rather than passing '' through to a foreign key) is what
+ * lets an admin clear a department, location, manager or job title.
+ */
+const optionalText = z
+  .string()
+  .max(120)
+  .optional()
+  .transform((v) => (v === '' ? null : v));
+
 export const createUserSchema = z.object({
   body: z.object({
     email: z.string().email(),
     name: z.string().min(2).max(120),
     password: z.string().min(10),
     roles: z.array(roleEnum).min(1),
-    jobTitle: z.string().max(120).optional(),
-    departmentId: z.string().optional(),
-    locationId: z.string().optional(),
-    managerEmployeeId: z.string().optional(),
+    jobTitle: optionalText,
+    departmentId: optionalText,
+    locationId: optionalText,
+    managerEmployeeId: optionalText,
   }),
 });
 
@@ -29,10 +40,10 @@ export const updateUserSchema = z.object({
       name: z.string().min(2).max(120).optional(),
       roles: z.array(roleEnum).min(1).optional(),
       active: z.boolean().optional(),
-      jobTitle: z.string().max(120).optional(),
-      departmentId: z.string().optional(),
-      locationId: z.string().optional(),
-      managerEmployeeId: z.string().optional(),
+      jobTitle: optionalText,
+      departmentId: optionalText,
+      locationId: optionalText,
+      managerEmployeeId: optionalText,
     })
     .refine((b) => Object.keys(b).length > 0, { message: 'No changes provided' }),
 });
