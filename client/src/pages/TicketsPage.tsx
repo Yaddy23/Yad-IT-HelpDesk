@@ -19,13 +19,14 @@ export default function TicketsPage() {
   const [params, setParams] = useSearchParams();
   const queue = (params.get('queue') ?? 'all') as Queue;
   const q = params.get('q') ?? '';
+  const sla = params.get('sla') === 'at_risk' ? 'at_risk' : undefined;
   const page = Number(params.get('page') ?? '1');
 
   const [searchDraft, setSearchDraft] = useState(q);
 
   const ticketsQuery = useQuery({
-    queryKey: ['tickets', { queue, q, page }],
-    queryFn: () => ticketsApi.list({ queue, q, page, sort: 'newest' }),
+    queryKey: ['tickets', { queue, q, sla, page }],
+    queryFn: () => ticketsApi.list({ queue, q, sla, page, sort: 'newest' }),
   });
   const countsQuery = useQuery({ queryKey: ['ticket-queues'], queryFn: ticketsApi.queues });
 
@@ -78,6 +79,18 @@ export default function TicketsPage() {
             {q2.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setParam('sla', sla ? '' : 'at_risk')}
+          aria-pressed={!!sla}
+          className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm transition-colors ${
+            sla
+              ? 'border-destructive bg-destructive text-on-destructive'
+              : 'border-border bg-card text-muted-foreground hover:border-ring/40 hover:text-foreground'
+          }`}
+        >
+          SLA at risk
+        </button>
         <form onSubmit={handleSearch} className="relative ml-auto w-full max-w-xs">
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
             <SearchIcon size={16} />

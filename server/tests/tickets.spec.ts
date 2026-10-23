@@ -2,6 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.js';
+import { prisma } from '../src/prisma/client.js';
 
 const app = createApp();
 
@@ -337,5 +338,52 @@ describe('Queue counts', () => {
     expect(techCounts.status).toBe(200);
     expect(techCounts.body.data.assignedToMe).toBe(1);
     expect(techCounts.body.data.open).toBe(1);
+  });
+
+  it('includes slaAtRisk and zero counts for plain employees', async () => {
+    await prisma.slaPolicy.create({
+      data: { name: 'Fast SLA', responseTargetMins: 10, resolveTargetMins: 60, warnPercent: 50, appliesTo: {} },
+    });
+    const created = await request(app).post('/api/v1/tickets').set('Authorization', `Bearer ${empToken}`).send(validTicket);
+    const ticketId = created.body.data.id as string;
+    await prisma.slaInstance.updateMany({
+      where: { ticketId },
+      data: { state: 'approaching' },
+    });
+
+    const adminCounts = await request(app).get('/api/v1/tickets/queues').set('Authorization', `Bearer ${adminToken}`);
+    expect(adminCounts.status).toBe(200);
+    expect(adminCounts.body.data.slaAtRisk).toBe(1);
+
+    // The requester sees the risk on their own ticket too.
+    const empCounts = await request(app).get('/api/v1/tickets/queues').set('Authorization', `Bearer ${empToken}`);
+    expect(empCounts.body.data.slaAtRisk).toBe(1);
+  });
+});
+
+describe('SLA risk filter', () => {
+  it('filters tickets by sla=at_risk within scope', async () => {
+    await prisma.slaPolicy.create({
+      data: { name: 'Fast SLA', responseTargetMins: 10, resolveTargetMins: 60, warnPercent: 50, appliesTo: {} },
+    });
+    const atRisk = await request(app).post('/api/v1/tickets').set('Authorization', `Bearer ${empToken}`).send(validTicket);
+    await request(app).post('/api/v1/tickets').set('Authorization', `Bearer ${empToken}`).send(validTicket);
+    await prisma.slaInstance.updateMany({
+      where: { ticketId: atRisk.body.data.id },
+      data: { state: 'breached' },
+    });
+
+    const list = await request(app)
+      .get('/api/v1/tickets?sla=at_risk')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body.data).toHaveLength(1);
+    expect(list.body.data[0].id).toBe(atRisk.body.data.id);
+
+    // The filter respects record scope: the employee sees only their own
+    // at-risk ticket (their second ticket isn't at risk, so it's filtered out).
+    const empList = await request(app).get('/api/v1/tickets?sla=at_risk').set('Authorization', `Bearer ${empToken}`);
+    expect(empList.body.data).toHaveLength(1);
+    expect(empList.body.data[0].id).toBe(atRisk.body.data.id);
   });
 });

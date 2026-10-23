@@ -112,6 +112,7 @@ export interface TicketListParams {
   status?: string;
   priority?: string;
   q?: string;
+  sla?: 'at_risk';
   page?: number;
   sort?: 'newest' | 'oldest' | 'priority';
 }
@@ -120,6 +121,7 @@ export interface QueueCounts {
   open: number;
   unassigned: number;
   assignedToMe: number;
+  slaAtRisk: number;
 }
 
 export interface UserOption {

@@ -51,6 +51,8 @@ export const listTicketsSchema = z.object({
       ),
     category: z.string().max(80).optional(),
     q: z.string().max(120).optional(),
+    /** Dashboard deep-link: only tickets with an SLA instance at risk. */
+    sla: z.enum(['at_risk']).optional(),
     sort: z.enum(['newest', 'oldest', 'priority']).default('newest'),
   }),
 });

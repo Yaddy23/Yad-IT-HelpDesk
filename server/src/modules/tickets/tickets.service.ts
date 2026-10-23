@@ -213,6 +213,7 @@ export async function listTickets(
     priority?: string[];
     category?: string;
     q?: string;
+    sla?: 'at_risk';
     sort: 'newest' | 'oldest' | 'priority';
   },
 ) {
@@ -250,6 +251,9 @@ export async function listTickets(
       query.status?.length ? { status: { in: query.status } } : {},
       query.priority?.length ? { priority: { in: query.priority as never } } : {},
       query.category ? { category: { equals: query.category, mode: 'insensitive' } } : {},
+      query.sla === 'at_risk'
+        ? { slaInstances: { some: { state: { in: ['approaching', 'breached'] as never } } } }
+        : {},
       searchWhere,
     ],
   };
@@ -601,6 +605,7 @@ export async function addComment(
 /** Queue counts for dashboard/header badges — scope-limited like the list. */
 export async function queueCounts(user: AuthedUser) {
   const scope = await ticketScopeWhere(user);
+  const riskStates = ['approaching', 'breached'] as const;
   const groupCounts = await prisma.ticket.groupBy({
     by: ['status'],
     where: { AND: [scope, { status: { in: OPEN_STATUSES } }] },
@@ -612,6 +617,15 @@ export async function queueCounts(user: AuthedUser) {
   const assignedToMe = await prisma.ticket.count({
     where: { AND: [scope, { assigneeId: user.employeeId ?? { in: [] } }, { status: { in: OPEN_STATUSES } }] },
   });
+  const slaAtRisk = await prisma.ticket.count({
+    where: {
+      AND: [
+        scope,
+        { status: { in: OPEN_STATUSES } },
+        { slaInstances: { some: { state: { in: riskStates as never } } } },
+      ],
+    },
+  });
   const open = groupCounts.reduce((sum, g) => sum + g._count._all, 0);
-  return { open, unassigned, assignedToMe };
+  return { open, unassigned, assignedToMe, slaAtRisk };
 }
