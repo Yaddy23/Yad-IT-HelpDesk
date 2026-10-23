@@ -47,14 +47,14 @@ Process: superpowers (brainstorm → design → plan → phased build). After ea
 - ✅ Acceptance: brief tests 15–19
 
 ## Phase 5 — Service Management
-- [ ] Service catalog (jsonb form schemas, eligibility, icon/order, active state) + catalog admin UI *(server done + demo seed; admin UI pending)*
-- [ ] Service requests: multi-item, states, fulfillment gating on approvals *(server done: submit/info/cancel/fulfill, gating enforced in decision tx; client pending)*
-- [ ] Approval engine: rules config, single/all/any/sequential, delegation, deadlines, reminders, SoD block, DB-unique deduped decisions, full history *(server done; client queue pending)*
+- [x] Service catalog (jsonb form schemas, eligibility, icon/order, active state) + catalog admin UI *(server done + demo seed; admin UI done: catalog browse, my requests, catalog admin CRUD, approvals queue)*
+- [x] Service requests: multi-item, states, fulfillment gating on approvals *(server done: submit/info/cancel/fulfill, gating enforced in decision tx; client done: request dialog with form validation, my requests list with detail)*
+- [x] Approval engine: rules config, single/all/any/sequential, delegation, deadlines, reminders, SoD block, DB-unique deduped decisions, full history *(server done; client queue done: approvals page with decide/delegate dialogs)*
 - [ ] Knowledge base: articles, revisions, states, visibility, search, feedback, resolved-ticket→draft-article
 - [ ] Problem management: lifecycle, incident links, RCA, workaround vs permanent fix, recurring-incident detection
 - [ ] Change management: types, risk assessment, plans, approval rules, scheduling conflicts w/ maintenance windows, PIR, failure/rollback tracking
 - [ ] Major incidents: declaration criteria/permissions, commander, stakeholder comms, timeline (internal notes protected)
-- ✅ Acceptance: brief tests 8–14 *(13 serviceMgmt integration tests green)*
+- ✅ Acceptance: brief tests 8–14 *(13 serviceMgmt integration tests green + 17 Playwright e2e tests green)*
 
 ## Phase 6 — Automation & Reporting
 - [ ] Automation rules engine: triggers/conditions/actions, validation-on-activate, loop/duplicate prevention, execution history (runs + node runs), admin UI

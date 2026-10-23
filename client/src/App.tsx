@@ -19,6 +19,10 @@ import TicketCreatePage from '@/pages/TicketCreatePage';
 import TicketDetailPage from '@/pages/TicketDetailPage';
 import TicketsPage from '@/pages/TicketsPage';
 import UsersPage from '@/pages/UsersPage';
+import CatalogAdminPage from '@/pages/CatalogAdminPage';
+import CatalogPage from '@/pages/CatalogPage';
+import MyRequestsPage from '@/pages/MyRequestsPage';
+import ApprovalsPage from '@/pages/ApprovalsPage';
 
 export default function App() {
   return (
@@ -28,6 +32,18 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
+          <Route
+            path="catalog"
+            element={<ProtectedRoute><CatalogPage /></ProtectedRoute>}
+          />
+          <Route
+            path="my-requests"
+            element={<ProtectedRoute><MyRequestsPage /></ProtectedRoute>}
+          />
+          <Route
+            path="approvals"
+            element={<ProtectedRoute permissions={['approvals:decide']}><ApprovalsPage /></ProtectedRoute>}
+          />
           <Route
             path="tickets"
             element={<ProtectedRoute permissions={['tickets:read']}>
@@ -83,8 +99,7 @@ export default function App() {
               <AuditsPage />
             </ProtectedRoute>}
           />
-          <Route
-            path="assets/:id"
+          <Route path="assets/:id"
             element={<ProtectedRoute permissions={['assets:read']}>
               <AssetDetailPage />
             </ProtectedRoute>}
@@ -105,6 +120,12 @@ export default function App() {
             path="admin/org"
             element={<ProtectedRoute permissions={['org:manage']}>
               <OrganizationPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="admin/catalog"
+            element={<ProtectedRoute permissions={['catalog:manage']}>
+              <CatalogAdminPage />
             </ProtectedRoute>}
           />
           <Route

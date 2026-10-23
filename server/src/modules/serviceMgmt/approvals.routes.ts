@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireAuth, requirePermission } from '../../core/auth.js';
 import { toAuthed } from '../../core/request.js';
+import { prisma } from '../../prisma/client.js';
 import {
   approvalDetail,
   decideApproval,
@@ -35,6 +36,24 @@ approvalsRouter.get('/queue', requirePermission('approvals:decide'), async (req,
   try {
     const actor = toAuthed(req).user!;
     res.json({ data: await myApprovalQueue(actor.id) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Delegation picker data. Deliberately separate from /users and /org/options:
+ * `approver`-role users hold neither `users:manage` nor `org:manage`.
+ */
+approvalsRouter.get('/delegates', requirePermission('approvals:decide'), async (_req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+      take: 500,
+    });
+    res.json({ data: users });
   } catch (e) {
     next(e);
   }
