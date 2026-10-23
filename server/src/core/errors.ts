@@ -28,9 +28,24 @@ function isPrismaError(err: unknown): err is { code: string; meta?: { target?: s
     (err as { code: string }).code.startsWith('P');
 }
 
+/**
+ * Prisma connectivity and pool-exhaustion codes. These are transient — the
+ * database was briefly unreachable, not the data wrong — so they get their own
+ * status and a log line that names the code. Without this they were
+ * indistinguishable from a genuine 500 in both the logs and the response.
+ */
+const TRANSIENT_PRISMA_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017', 'P2024']);
+
 /** Express 5 forwards rejected async handlers to this error middleware. */
-export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
+  const requestId = req.id;
+  const tag = requestId ? ` req=${requestId}` : '';
+  /** Server faults carry the request id, so a user report maps to a log line. */
+  const serverError = (status: number, code: string, message: string) =>
+    res.status(status).json({ error: { code, message, ...(requestId ? { requestId } : {}) } });
+
   if (err instanceof AppError) {
+    if (err.status >= 500) return serverError(err.status, err.code, err.message);
     return res.status(err.status).json({ error: { code: err.code, message: err.message } });
   }
   if (err instanceof ZodError) {
@@ -43,6 +58,10 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     });
   }
   if (isPrismaError(err)) {
+    if (TRANSIENT_PRISMA_CODES.has(err.code)) {
+      logger.error(`[http] Prisma connection error ${err.code} (transient — database unreachable or pool exhausted)${tag}`, err);
+      return serverError(503, 'DB_UNAVAILABLE', 'The database is temporarily unavailable — please retry.');
+    }
     if (err.code === 'P2002') {
       // Unique constraint violation
       const fields = (err.meta?.target ?? []).join(', ');
@@ -58,8 +77,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
         error: { code: 'FK_CONSTRAINT', message: 'Referenced record does not exist or is still in use' },
       });
     }
-    logger.error(`[http] Prisma error ${err.code}`, err);
-    return res.status(500).json({ error: { code: 'DB_ERROR', message: 'Database operation failed' } });
+    logger.error(`[http] Prisma error ${err.code}${tag}`, err);
+    return serverError(500, 'DB_ERROR', 'Database operation failed');
   }
   // express.json() parse failures (malformed JSON) surface as SyntaxError.
   if (err instanceof SyntaxError && 'status' in err && (err as { status?: number }).status === 400) {
@@ -75,8 +94,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     }
   }
 
-  logger.error('[http] Unhandled error', err);
-  return res.status(500).json({ error: { code: 'INTERNAL', message: 'Internal server error' } });
+  logger.error(`[http] Unhandled error${tag}`, err);
+  return serverError(500, 'INTERNAL', 'Internal server error');
 }
 
 export function notFoundHandler(_req: Request, res: Response) {

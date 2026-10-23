@@ -285,10 +285,13 @@ function OrgSelects({
   form,
   setForm,
   options,
+  excludeEmployeeId,
 }: {
   form: { departmentId: string; locationId: string; managerEmployeeId: string };
   setForm: (patch: Partial<{ departmentId: string; locationId: string; managerEmployeeId: string }>) => void;
   options: UserOptions | undefined;
+  /** The account being edited — nobody reports to themselves, so it is not offered. */
+  excludeEmployeeId?: string;
 }) {
   return (
     <>
@@ -330,11 +333,13 @@ function OrgSelects({
           className={`${inputClass} cursor-pointer`}
         >
           <option value="">—</option>
-          {options?.employees.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.name} ({e.employeeId})
-            </option>
-          ))}
+          {options?.employees
+            .filter((e) => e.id !== excludeEmployeeId)
+            .map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name} ({e.employeeId})
+              </option>
+            ))}
         </select>
       </label>
     </>
@@ -515,7 +520,12 @@ function EditUserDialog({
             <span className="mb-1 block font-medium">Job title</span>
             <input maxLength={120} value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} className={inputClass} />
           </label>
-          <OrgSelects form={form} setForm={(patch) => setForm({ ...form, ...patch })} options={options} />
+          <OrgSelects
+            form={form}
+            setForm={(patch) => setForm({ ...form, ...patch })}
+            options={options}
+            excludeEmployeeId={user.employee?.id}
+          />
           <div className="sm:col-span-2">
             <RolePicker value={form.roles} onChange={(roles) => setForm({ ...form, roles })} />
           </div>

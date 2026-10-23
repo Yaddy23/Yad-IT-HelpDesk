@@ -131,6 +131,33 @@ export async function createUser(req: AuthedRequest, input: CreateUserInput) {
   return strip(user);
 }
 
+/**
+ * A person cannot report to themselves, and a reporting chain must not loop —
+ * an approval route that cycles never terminates. Walks the proposed manager's
+ * own chain upward; the visited set also stops a walk through pre-existing bad
+ * data, so the depth is bounded by the org size rather than by a magic number.
+ */
+async function assertManagerAssignable(employeeId: string | null, managerEmployeeId: string | null | undefined) {
+  if (!managerEmployeeId) return;
+  if (managerEmployeeId === employeeId) {
+    throw badRequest('A person cannot be their own manager', 'SELF_MANAGER');
+  }
+
+  const visited = new Set<string>();
+  let cursor: string | null = managerEmployeeId;
+  while (cursor && !visited.has(cursor)) {
+    visited.add(cursor);
+    const node: { managerId: string | null } | null = await prisma.employee.findUnique({
+      where: { id: cursor },
+      select: { managerId: true },
+    });
+    cursor = node?.managerId ?? null;
+    if (cursor && cursor === employeeId) {
+      throw badRequest('That manager already reports to this person', 'MANAGER_CYCLE');
+    }
+  }
+}
+
 export interface UpdateUserInput {
   name?: string;
   roles?: Role[];
@@ -146,13 +173,15 @@ export async function updateUser(req: AuthedRequest, id: string, input: UpdateUs
   const actor = req.user!;
   const existing = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, roles: { select: { role: true } }, active: true, name: true },
+    select: { id: true, roles: { select: { role: true } }, active: true, name: true, employee: { select: { id: true } } },
   });
   if (!existing) throw notFound('User not found');
 
   if (typeof input.active === 'boolean' && !input.active) {
     if (id === actor.id) throw badRequest('You cannot deactivate your own account', 'SELF_DEACTIVATION');
   }
+
+  await assertManagerAssignable(existing.employee?.id ?? null, input.managerEmployeeId);
 
   const user = await prisma.$transaction(async (tx) => {
     if (typeof input.active === 'boolean' && !input.active) {

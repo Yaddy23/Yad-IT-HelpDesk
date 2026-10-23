@@ -11,8 +11,10 @@ const MANAGER = { email: 'manager@test.local', name: 'Manager Person', password:
 const EMP = { email: 'emp@test.local', name: 'Employee Person', password: 'Password123abc' };
 
 let adminToken = '';
+let managerId = '';
 let managerEmployeeId = '';
 let empId = '';
+let empEmployeeId = '';
 
 async function login(email: string, password: string): Promise<string> {
   const res = await request(app).post('/api/v1/auth/login').send({ email, password });
@@ -28,9 +30,11 @@ beforeEach(async () => {
   adminToken = await login(ADMIN.email, ADMIN.password);
 
   const manager = await createUser({ ...MANAGER, roles: ['it_manager'] });
+  managerId = manager.body.data.id;
   managerEmployeeId = manager.body.data.employee.id;
   const emp = await createUser({ ...EMP, roles: ['employee'] });
   empId = emp.body.data.id;
+  empEmployeeId = emp.body.data.employee.id;
 });
 
 describe('User administration', () => {
@@ -128,6 +132,71 @@ describe('User administration', () => {
 
     const audit = await request(app).get('/api/v1/audit').set('Authorization', `Bearer ${adminToken}`).query({ limit: 50 });
     expect(audit.body.data.map((e: { action: string }) => e.action)).toContain('user.password_reset');
+  });
+
+  it('refuses to make a person their own manager', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/users/${empId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ managerEmployeeId: empEmployeeId });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('SELF_MANAGER');
+  });
+
+  it('refuses a reporting cycle', async () => {
+    const set = await request(app)
+      .patch(`/api/v1/users/${empId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ managerEmployeeId });
+    expect(set.status).toBe(200);
+
+    // The employee is now the manager's manager — closing the loop must fail.
+    const res = await request(app)
+      .patch(`/api/v1/users/${managerId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ managerEmployeeId: empEmployeeId });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('MANAGER_CYCLE');
+  });
+
+  it('refuses a reporting cycle more than one hop away', async () => {
+    const third = await createUser({ email: 'third@test.local', name: 'Third Person', password: 'Password123abc', roles: ['employee'] });
+    const thirdUserId = third.body.data.id;
+    const thirdEmployeeId = third.body.data.employee.id;
+
+    await request(app)
+      .patch(`/api/v1/users/${empId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ managerEmployeeId });
+    await request(app)
+      .patch(`/api/v1/users/${thirdUserId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ managerEmployeeId: empEmployeeId });
+
+    // manager → third → emp → manager would close a three-node loop.
+    const res = await request(app)
+      .patch(`/api/v1/users/${managerId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ managerEmployeeId: thirdEmployeeId });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('MANAGER_CYCLE');
+  });
+
+  it('still allows a legitimate manager and clearing it', async () => {
+    const set = await request(app)
+      .patch(`/api/v1/users/${empId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ managerEmployeeId });
+    expect(set.status).toBe(200);
+    expect(set.body.data.employee.managerId).toBe(managerEmployeeId);
+
+    // Clearing must not trip the cycle guard.
+    const cleared = await request(app)
+      .patch(`/api/v1/users/${empId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ managerEmployeeId: '' });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.employee.managerId).toBeNull();
   });
 
   it('rejects a user with no roles', async () => {
