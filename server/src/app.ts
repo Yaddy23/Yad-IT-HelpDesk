@@ -23,6 +23,8 @@ import { assetAuditsRouter } from './modules/audits/audits.routes.js';
 import { catalogRouter } from './modules/serviceMgmt/catalog.routes.js';
 import { requestsRouter } from './modules/serviceMgmt/requests.routes.js';
 import { approvalsRouter } from './modules/serviceMgmt/approvals.routes.js';
+import { knowledgeRouter } from './modules/knowledge/knowledge.routes.js';
+
 export function createApp(): Express {
   const app = express();
 
@@ -62,6 +64,7 @@ export function createApp(): Express {
   app.use('/api/v1/catalog', catalogRouter);
   app.use('/api/v1/service-requests', requestsRouter);
   app.use('/api/v1/approvals', approvalsRouter);
+  app.use('/api/v1/knowledge', knowledgeRouter);
 
   // SPA fallback for client-side routing — only for non-API GET requests.
   app.get(/^(?!\/api\/).*/, (_req, res) => {
