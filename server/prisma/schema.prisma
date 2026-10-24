@@ -60,6 +60,10 @@ model User {
   assetsChecked          AssetAuditItem[]         @relation("assetChecker")
   approvalsRequested     ApprovalRequest[]        @relation("approvalsRequested")
   approvalDecisions      ApprovalDecision[]       @relation("approvalDecisions")
+  knowledgeAuthored      KnowledgeArticle[]       @relation("knowledgeAuthor")
+  knowledgeOwned         KnowledgeArticle[]       @relation("knowledgeOwner")
+  knowledgeRevisions     KnowledgeRevision[]      @relation("knowledgeEditor")
+  knowledgeFeedback      KnowledgeFeedback[]      @relation("knowledgeFeedback")
   lastLoginAt            DateTime?
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
@@ -349,6 +353,7 @@ model Ticket {
   assignments            TicketAssignment[]
   attachments            Attachment[]
   slaInstances           SlaInstance[]
+  knowledgeArticles      KnowledgeArticle[]
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
@@ -545,6 +550,7 @@ model NotificationPreference {
   slaWarnings  Boolean  @default(true)
   slaBreaches  Boolean  @default(true)
   ticketUpdate Boolean  @default(true)
+  knowledge    Boolean  @default(true)
   updatedAt    DateTime @updatedAt
 }
 
@@ -1042,4 +1048,105 @@ model ApprovalDecision {
   /// info_requested rows may stack as the info-round history.
   @@index([requestId, stepIndex, approverId])
   @@index([approverId])
+}
+
+/**
+ * ── Knowledge base (Phase 5) ──────────────────────────────────
+ * Live articles + append-only revisions + per-user helpful votes.
+ */
+
+enum KnowledgeStatus {
+  draft
+  in_review
+  published
+  archived
+}
+
+enum KnowledgeVisibility {
+  public
+  internal
+  restricted
+}
+
+/// Live knowledge article. The row is the current pointer; every content
+/// change appends an immutable KnowledgeRevision. `version` is both the
+/// current revision number and the optimistic-concurrency token.
+model KnowledgeArticle {
+  id                String               @id @default(cuid())
+  title             String
+  summary           String?
+  body              String
+  category          String
+  tags              String[]             @default([])
+  status            KnowledgeStatus      @default(draft)
+  visibility        KnowledgeVisibility  @default(internal)
+  /// Only consulted when visibility = restricted; empty list = nobody but
+  /// the author and a publisher can read it.
+  allowedRoles      Role[]               @default([])
+  authorId          String
+  author            User                 @relation("knowledgeAuthor", fields: [authorId], references: [id])
+  ownerId           String?
+  owner             User?                @relation("knowledgeOwner", fields: [ownerId], references: [id])
+  sourceTicketId    String?
+  sourceTicket      Ticket?              @relation(fields: [sourceTicketId], references: [id])
+  version           Int                  @default(1)
+  publishedAt       DateTime?
+  reviewIntervalDays Int                 @default(90)
+  reviewDueAt       DateTime?
+  helpfulCount      Int                  @default(0)
+  notHelpfulCount   Int                  @default(0)
+  revisions         KnowledgeRevision[]
+  feedback          KnowledgeFeedback[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([status, visibility])
+  @@index([category, status])
+  @@index([authorId])
+  @@index([ownerId])
+  @@index([sourceTicketId])
+  @@index([reviewDueAt])
+  @@index([updatedAt(sort: Desc)])
+}
+
+/// Append-only content history. A revision is a snapshot, never a delta:
+/// restoring an old revision appends a NEW row whose content equals it.
+/// Unique (articleId, revisionNumber) — a duplicated snapshot from a retry
+/// is impossible at the DB level.
+model KnowledgeRevision {
+  id             String            @id @default(cuid())
+  articleId      String
+  article        KnowledgeArticle  @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  revisionNumber Int
+  title          String
+  summary        String?
+  body           String
+  category       String
+  tags           String[]          @default([])
+  visibility     KnowledgeVisibility
+  allowedRoles   Role[]            @default([])
+  changeNote     String?
+  editorId       String
+  editor         User              @relation("knowledgeEditor", fields: [editorId], references: [id])
+  createdAt      DateTime          @default(now())
+
+  @@unique([articleId, revisionNumber])
+  @@index([articleId, createdAt(sort: Desc)])
+}
+
+/// One live vote per (article, user) — re-voting updates the row and the
+/// counters move by the delta, so a flip can never double-count.
+model KnowledgeFeedback {
+  id        String            @id @default(cuid())
+  articleId String
+  article   KnowledgeArticle  @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  userId    String
+  user      User              @relation("knowledgeFeedback", fields: [userId], references: [id])
+  helpful   Boolean
+  comment   String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([articleId, userId])
+  @@index([articleId, helpful])
 }

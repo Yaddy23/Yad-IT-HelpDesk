@@ -27,11 +27,16 @@ export const PERMISSIONS = {
   'assets:create': 'Create assets and inventory/licenses/audit records',
   'assets:update': 'Update assets, lifecycle transitions, maintenance and warranty',
   'assets:assign': 'Assign/return assets, licenses and stock',
+  // knowledge base (Phase 5)
+  'kb:read': 'Search and read published knowledge articles',
+  'kb:read_internal': 'Read internal (IT-only) knowledge articles',
+  'kb:author': 'Create and edit knowledge articles and submit them for review',
+  'kb:publish': 'Approve, publish, archive and restore knowledge articles',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
 
-const EMPLOYEE_BASE: Permission[] = ['tickets:create', 'tickets:read'];
+const EMPLOYEE_BASE: Permission[] = ['tickets:create', 'tickets:read', 'kb:read'];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   super_admin: Object.keys(PERMISSIONS) as Permission[],
@@ -51,6 +56,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'assets:create',
     'assets:update',
     'assets:assign',
+    'kb:read',
+    'kb:read_internal',
+    'kb:author',
+    'kb:publish',
   ],
   it_manager: [
     'tickets:read',
@@ -64,6 +73,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'assets:create',
     'assets:update',
     'assets:assign',
+    'kb:read',
+    'kb:read_internal',
+    'kb:author',
+    'kb:publish',
   ],
   it_technician: [
     'tickets:read',
@@ -73,9 +86,12 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'assets:read',
     'assets:update',
     'assets:assign',
+    'kb:read',
+    'kb:read_internal',
+    'kb:author',
   ],
   employee: EMPLOYEE_BASE,
-  approver: ['approvals:decide'],
+  approver: ['approvals:decide', 'kb:read'],
 };
 
 export function hasPermission(user: { roles: Role[] }, permission: Permission): boolean {
