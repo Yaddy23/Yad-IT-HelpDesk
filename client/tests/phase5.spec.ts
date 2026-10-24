@@ -5,7 +5,7 @@ const DEMO_EMPLOYEE = 'employee@demo.local';
 const DEMO_PASSWORD = 'ChangeMe!2026';
 
 // Helper to login as a specific user (creates fresh context without storage state)
-async function loginAs(page, email) {
+async function loginAs(page: import('@playwright/test').Page, email: string) {
   await page.goto('/login');
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', DEMO_PASSWORD);

@@ -21,6 +21,9 @@ import TicketsPage from '@/pages/TicketsPage';
 import UsersPage from '@/pages/UsersPage';
 import CatalogAdminPage from '@/pages/CatalogAdminPage';
 import CatalogPage from '@/pages/CatalogPage';
+import KnowledgeCreatePage from '@/pages/KnowledgeCreatePage';
+import KnowledgeDetailPage from '@/pages/KnowledgeDetailPage';
+import KnowledgePage from '@/pages/KnowledgePage';
 import MyRequestsPage from '@/pages/MyRequestsPage';
 import ApprovalsPage from '@/pages/ApprovalsPage';
 
@@ -63,6 +66,18 @@ export default function App() {
             </ProtectedRoute>}
           />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route
+            path="knowledge"
+            element={<ProtectedRoute permissions={['kb:read']}><KnowledgePage /></ProtectedRoute>}
+          />
+          <Route
+            path="knowledge/new"
+            element={<ProtectedRoute permissions={['kb:author']}><KnowledgeCreatePage /></ProtectedRoute>}
+          />
+          <Route
+            path="knowledge/:id"
+            element={<ProtectedRoute permissions={['kb:read']}><KnowledgeDetailPage /></ProtectedRoute>}
+          />
           <Route
             path="assets"
             element={<ProtectedRoute permissions={['assets:read']}>

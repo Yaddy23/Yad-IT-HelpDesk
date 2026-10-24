@@ -102,7 +102,7 @@ knowledgeRouter.get('/:id', async (req, res, next) => {
 knowledgeRouter.post('/', requirePermission('kb:author'), async (req, res, next) => {
   try {
     const actor = toAuthed(req).user!;
-    const input = articleCreateSchema.parse(req.body).body;
+    const input = articleCreateSchema.parse(req.body);
     const article = await createArticle(actor, input);
     res.status(201).json({ data: article });
   } catch (e) {

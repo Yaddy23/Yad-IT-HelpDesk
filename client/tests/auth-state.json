@@ -6,7 +6,7 @@
       "localStorage": [
         {
           "name": "itsm.tokens",
-          "value": "{\"accessToken\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbXZodjZqOHAwMDBpOTFja2x5d3FqbmxuIiwiZW1haWwiOiJhZG1pbkBkZW1vLmxvY2FsIiwicm9sZXMiOlsic3VwZXJfYWRtaW4iXSwiaWF0IjoxNzkyNzY1NzU2LCJleHAiOjE3OTI3OTQ1NTZ9.znzvB2KMLATsPZXWoE4XRJoTqBfEMt-m2BGxhQ7Akwg\",\"refreshToken\":\"J2CnfY199XK2hOLPBGtpeMazE-zNR1TZrFoJYIMpMdlNjaNn-w7LXOB6xmgKadOw\",\"refreshTokenExpiresAt\":\"2026-10-30T14:29:16.199Z\"}"
+          "value": "{\"accessToken\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbXZodjZqOHAwMDBpOTFja2x5d3FqbmxuIiwiZW1haWwiOiJhZG1pbkBkZW1vLmxvY2FsIiwicm9sZXMiOlsic3VwZXJfYWRtaW4iXSwiaWF0IjoxNzkyODM2MzY1LCJleHAiOjE3OTI4NjUxNjV9.eekM7eA5SBFgnx51pFvGVO2MrKOJ_q3Jru-LaLRaLXA\",\"refreshToken\":\"gHNTjuf6h_24KsvKSBd6DFRcaCAtsXP5qNL0OYnqnHpFI9-V72iAEZOIg9VVTMHG\",\"refreshTokenExpiresAt\":\"2026-10-31T10:06:05.318Z\"}"
         }
       ]
     }

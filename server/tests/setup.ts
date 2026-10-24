@@ -38,9 +38,9 @@ process.env.DIRECT_URL = testUrl;
 
 const { prisma } = await import('../src/prisma/client.js');
 
-// The test schema may not exist yet on a fresh project — create it before
-// migrate deploy, which fails with "schema does not exist" otherwise.
+console.log('[setup] Prisma client imported, about to create schema');
 await prisma.$executeRawUnsafe('CREATE SCHEMA IF NOT EXISTS test');
+console.log('[setup] Schema created, running migrations');
 
 // Apply migrations to the test schema once (before the first test file's imports).
 execSync('npx prisma migrate deploy', {
@@ -49,12 +49,28 @@ execSync('npx prisma migrate deploy', {
 });
 
 beforeEach(async () => {
+  console.log('[setup] beforeEach: truncating tables');
   const tables = await prisma.$queryRaw<{ tablename: string }[]>`
     SELECT tablename FROM pg_tables WHERE schemaname = 'test' AND tablename NOT LIKE '_prisma%'
   `;
+  console.log('[setup] beforeEach: tables to truncate:', tables.map(t => t.tablename));
   if (tables.length > 0) {
     const list = tables.map((t) => `"test"."${t.tablename}"`).join(', ');
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+    // Retry on deadlock (40P01) - can happen if multiple test workers race
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+        console.log('[setup] beforeEach: truncate complete');
+        break;
+      } catch (err: any) {
+        if (err.code === '40P01' && attempt < 3) {
+          console.log(`[setup] beforeEach: deadlock detected (attempt ${attempt}/3), retrying...`);
+          await new Promise(r => setTimeout(r, 100 * attempt));
+          continue;
+        }
+        throw err;
+      }
+    }
   }
 });
 

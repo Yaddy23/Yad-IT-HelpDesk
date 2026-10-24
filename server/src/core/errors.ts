@@ -44,6 +44,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   const serverError = (status: number, code: string, message: string) =>
     res.status(status).json({ error: { code, message, ...(requestId ? { requestId } : {}) } });
 
+  // Handle STALE_VERSION optimistic concurrency error before AppError check
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as { code?: unknown }).code;
+    if (code === 'STALE_VERSION') {
+      return res.status(409).json({ error: { code: 'STALE_VERSION', message: 'Article was modified by another user. Please refresh and try again.' } });
+    }
+  }
+
   if (err instanceof AppError) {
     if (err.status >= 500) return serverError(err.status, err.code, err.message);
     return res.status(err.status).json({ error: { code: err.code, message: err.message } });

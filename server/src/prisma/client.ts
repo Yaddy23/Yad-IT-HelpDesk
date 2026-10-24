@@ -3,13 +3,33 @@ import { PrismaClient } from '@prisma/client';
 import { isProd } from '../config/env.js';
 import { logger } from '../core/logger.js';
 
-/**
- * Single PrismaClient instance for the whole server. Prisma connects lazily
- * and pools connections; explicit $connect() warms it at boot.
- */
-export const prisma = new PrismaClient({
-  log: isProd ? ['error'] : ['error', 'warn'],
+let prismaInstance: PrismaClient | null = null;
+
+function createPrismaClient(): PrismaClient {
+  const url = process.env.DATABASE_URL;
+  console.log('[prisma] Creating PrismaClient with URL:', url?.substring(0, 50) + '...');
+  return new PrismaClient({
+    log: isProd ? ['error'] : ['error', 'warn'],
+    datasourceUrl: url,
+  });
+}
+
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    if (!prismaInstance) {
+      prismaInstance = createPrismaClient();
+      console.log('[prisma] PrismaClient created');
+    }
+    return Reflect.get(prismaInstance, prop, receiver);
+  },
 });
+
+export function getPrismaClient(): PrismaClient {
+  if (!prismaInstance) {
+    prismaInstance = createPrismaClient();
+  }
+  return prismaInstance;
+}
 
 export async function connectDatabase(): Promise<void> {
   try {
@@ -22,6 +42,8 @@ export async function connectDatabase(): Promise<void> {
 }
 
 export async function disconnectDatabase(): Promise<void> {
-  await prisma.$disconnect();
-  logger.info('[db] Disconnected from Postgres');
+  if (prismaInstance) {
+    await prismaInstance.$disconnect();
+    logger.info('[db] Disconnected from Postgres');
+  }
 }

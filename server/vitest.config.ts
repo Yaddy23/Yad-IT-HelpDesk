@@ -6,7 +6,12 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts'],
     testTimeout: 30_000,
     hookTimeout: 120_000,
-    pool: 'forks',
-    fileParallelism: false,
+    pool: 'threads',
+    maxWorkers: 1,
+    maxConcurrency: 1,
+    sequence: {
+      hooks: 'list',
+      concurrent: false,
+    },
   },
 });
