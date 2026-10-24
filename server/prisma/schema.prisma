@@ -247,6 +247,7 @@ model SystemSettings {
   reopenWindowDays       Int      @default(3)
   autoCloseResolvedDays  Int      @default(5)
   maxAutomationLoopDepth Int      @default(5)
+  featureFlags           Json     @default("{}")
   modifiedById           String?
   modifiedBy             User?    @relation("settingsModifier", fields: [modifiedById], references: [id])
   createdAt              DateTime @default(now())
