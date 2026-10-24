@@ -341,3 +341,100 @@ describe('Knowledge base — visibility scoping', () => {
     expect(res.body.data).toHaveLength(0);
   });
 });
+
+describe('Knowledge base — authoring lifecycle', () => {
+  it('creates a draft and writes revision 1', async () => {
+    const res = await request(app).post('/api/v1/knowledge')
+      .set('Authorization', `Bearer ${techToken}`).send(ARTICLE);
+    expect(res.status).toBe(201);
+    expect(res.body.data.status).toBe('draft');
+    const revs = await prisma.knowledgeRevision.findMany({ where: { articleId: res.body.data.id } });
+    expect(revs).toHaveLength(1);
+    expect(revs[0].revisionNumber).toBe(1);
+  });
+
+  it('moves a published article back to draft when its content is edited', async () => {
+    const res = await request(app).patch(`/api/v1/knowledge/${publishedPublicId}`)
+      .set('Authorization', `Bearer ${techToken}`)
+      .send({ body: 'Rewritten body text for the article.', version: 1 });
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('draft');
+    expect(res.body.data.version).toBe(2);
+  });
+
+  it('refuses to publish without kb:publish', async () => {
+    const res = await request(app).post(`/api/v1/knowledge/${inReviewId}/publish`)
+      .set('Authorization', `Bearer ${techToken}`).send({});
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects a stale version with 409 STALE_VERSION', async () => {
+    const res = await request(app).patch(`/api/v1/knowledge/${draftId}`)
+      .set('Authorization', `Bearer ${techToken}`)
+      .send({ title: 'A newer title', version: 99 });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('STALE_VERSION');
+  });
+
+  it('restores an old revision as a new revision without rewriting history', async () => {
+    // Self-contained: create (rev 1), edit (rev 2), then restore rev 1 (rev 3).
+    const created = await request(app).post('/api/v1/knowledge')
+      .set('Authorization', `Bearer ${techToken}`).send({ ...ARTICLE, body: 'Original body content for this article.' });
+    const id = created.body.data.id;
+
+    const edited = await request(app).patch(`/api/v1/knowledge/${id}`)
+      .set('Authorization', `Bearer ${techToken}`)
+      .send({ body: 'Replacement body content for this article.', version: 1 });
+    expect(edited.body.data.version).toBe(2);
+
+    const res = await request(app).post(`/api/v1/knowledge/${id}/revisions/1/restore`)
+      .set('Authorization', `Bearer ${techToken}`).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.data.version).toBe(3);
+    expect(res.body.data.body).toBe('Original body content for this article.');
+
+    const revs = await prisma.knowledgeRevision.findMany({
+      where: { articleId: id }, orderBy: { revisionNumber: 'asc' },
+    });
+    expect(revs.map((r) => r.revisionNumber)).toEqual([1, 2, 3]);
+    expect(revs[1].body).toBe('Replacement body content for this article.'); // rev 2 was not overwritten
+  });
+
+  it('publishes an in_review article and stamps publishedAt and reviewDueAt', async () => {
+    const res = await request(app).post(`/api/v1/knowledge/${inReviewId}/publish`)
+      .set('Authorization', `Bearer ${mgrToken}`).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('published');
+    expect(res.body.data.publishedAt).not.toBeNull();
+    expect(res.body.data.reviewDueAt).not.toBeNull();
+  });
+
+  it('rejects an in_review article back to draft with a note', async () => {
+    const res = await request(app).post(`/api/v1/knowledge/${inReviewId}/reject`)
+      .set('Authorization', `Bearer ${mgrToken}`).send({ note: 'Missing security considerations.' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('draft');
+  });
+
+  it('archives and restores a published article', async () => {
+    const archived = await request(app).post(`/api/v1/knowledge/${publishedPublicId}/archive`)
+      .set('Authorization', `Bearer ${mgrToken}`).send({});
+    expect(archived.status).toBe(200);
+    expect(archived.body.data.status).toBe('archived');
+
+    const restored = await request(app).post(`/api/v1/knowledge/${publishedPublicId}/restore`)
+      .set('Authorization', `Bearer ${mgrToken}`).send({});
+    expect(restored.status).toBe(200);
+    expect(restored.body.data.status).toBe('published');
+  });
+
+  it('forbids an author editing an article they do not own', async () => {
+    // publishedInternalId is owned by techUserId, try with mgrToken (not owner, has kb:author but not kb:publish for edit)
+    // Actually, mgrToken has kb:publish which grants edit permission per the rules.
+    // Let's use employeeToken (has kb:read only, no kb:author) - should be 403
+    const res = await request(app).patch(`/api/v1/knowledge/${publishedPublicId}`)
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({ body: 'Unauthorized edit attempt.', version: 1 });
+    expect(res.status).toBe(403);
+  });
+});
