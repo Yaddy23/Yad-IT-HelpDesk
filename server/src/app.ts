@@ -26,6 +26,7 @@ import { approvalsRouter } from './modules/serviceMgmt/approvals.routes.js';
 import { knowledgeRouter } from './modules/knowledge/knowledge.routes.js';
 import { problemsRouter } from './modules/problems/problems.routes.js';
 import { detectionRouter } from './modules/problems/detection/detection.routes.js';
+import { knownErrorsRouter } from './modules/known-errors/knownErrors.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -72,6 +73,7 @@ export function createApp(): Express {
   // Requests matching nothing in detectionRouter fall through to it.
   app.use('/api/v1/problems', detectionRouter);
   app.use('/api/v1/problems', problemsRouter);
+  app.use('/api/v1/known-errors', knownErrorsRouter);
 
   // SPA fallback for client-side routing — only for non-API GET requests.
   app.get(/^(?!\/api\/).*/, (_req, res) => {
