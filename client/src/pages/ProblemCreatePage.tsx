@@ -38,7 +38,6 @@ export default function ProblemCreatePage() {
     queryFn: () => usersApi.options(),
     select: (data) => data.employees,
   });
-
   const create = useMutation({
     mutationFn: problemApi.create,
     onSuccess: (problem) => {
@@ -151,11 +150,16 @@ export default function ProblemCreatePage() {
             className="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2 text-sm transition-colors hover:border-ring/40 focus:border-ring"
           >
             <option value="">Select owner</option>
-            {usersData?.map((u: { id: string; name: string; employeeId: string }) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
+            {/* An owner is a login User, not an Employee — only employees
+                with a linked account can own a problem, and the value sent to
+                the API is the user id. */}
+            {usersData
+              ?.filter((u) => u.userId)
+              .map((u) => (
+                <option key={u.userId} value={u.userId}>
+                  {u.name}
+                </option>
+              ))}
           </select>
         </div>
 

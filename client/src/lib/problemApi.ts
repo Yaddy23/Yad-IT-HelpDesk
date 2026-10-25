@@ -664,6 +664,66 @@ export function useKnownError(
 
 /* ── Helpers ────────────────────────────────────────────────────────────────── */
 
+/**
+ * Statuses render as human labels. The enum carries more than one underscore
+ * (`ROOT_CAUSE_KNOWN`, `WORKAROUND_DOCUMENTED`), so the obvious
+ * `status.replace('_', ' ')` would print "ROOT CAUSE_KNOWN".
+ */
+export const PROBLEM_STATUS_LABELS: Record<ProblemStatus, string> = {
+  IDENTIFIED: 'Identified',
+  INVESTIGATION: 'Investigation',
+  ROOT_CAUSE_KNOWN: 'Root Cause Known',
+  WORKAROUND_DOCUMENTED: 'Workaround Documented',
+  PENDING_CHANGE: 'Pending Change',
+  RESOLVED: 'Resolved',
+  CLOSED: 'Closed',
+};
+
+/**
+ * Mirrors `PROBLEM_STATUS_TRANSITIONS` in
+ * `server/src/modules/problems/config.ts`. The server is the authority and
+ * rejects anything absent here — this copy exists only so the UI offers valid
+ * moves instead of letting the user pick one that 409s.
+ */
+export const PROBLEM_STATUS_TRANSITIONS: Record<ProblemStatus, ProblemStatus[]> = {
+  IDENTIFIED: ['INVESTIGATION', 'ROOT_CAUSE_KNOWN', 'WORKAROUND_DOCUMENTED', 'PENDING_CHANGE', 'RESOLVED', 'CLOSED'],
+  INVESTIGATION: ['ROOT_CAUSE_KNOWN', 'WORKAROUND_DOCUMENTED', 'PENDING_CHANGE', 'RESOLVED', 'CLOSED'],
+  ROOT_CAUSE_KNOWN: ['WORKAROUND_DOCUMENTED', 'PENDING_CHANGE', 'RESOLVED', 'CLOSED'],
+  WORKAROUND_DOCUMENTED: ['PENDING_CHANGE', 'RESOLVED', 'CLOSED'],
+  PENDING_CHANGE: ['RESOLVED', 'CLOSED'],
+  RESOLVED: ['CLOSED', 'INVESTIGATION'],
+  CLOSED: [],
+};
+
+/**
+ * Transitions the server will reject without extra input, so the UI can ask
+ * for it up front rather than round-tripping a 400. `RESOLVED` needs a
+ * resolution summary plus either a verified fix or a manager-signed exception;
+ * `ROOT_CAUSE_KNOWN` needs a documented *and confirmed* root cause;
+ * `WORKAROUND_DOCUMENTED` needs a workaround; `PENDING_CHANGE` needs at least
+ * one linked change request.
+ */
+export function getTransitionRequirements(
+  problem: Pick<ProblemDetail, 'rootCause' | 'confirmedRootCause' | 'workaround' | 'changeRequestIds'>,
+  status: ProblemStatus,
+): string[] {
+  const missing: string[] = [];
+  if (status === 'ROOT_CAUSE_KNOWN') {
+    if (!problem.rootCause?.trim()) missing.push('a documented root cause');
+    if (!problem.confirmedRootCause) missing.push('root cause confirmation');
+  }
+  if (status === 'WORKAROUND_DOCUMENTED' && !problem.workaround?.trim()) {
+    missing.push('a documented workaround');
+  }
+  if (status === 'PENDING_CHANGE' && problem.changeRequestIds.length === 0) {
+    missing.push('at least one linked change request');
+  }
+  if (status === 'RESOLVED') {
+    missing.push('a resolution summary and either a verified fix or a manager exception reason');
+  }
+  return missing;
+}
+
 export function getProblemStatusBadgeClass(status: ProblemStatus): string {
   switch (status) {
     case 'IDENTIFIED':
@@ -704,4 +764,49 @@ export function getKnownErrorStatusBadgeClass(status: KnownErrorStatus): string 
  */
 export function formatProblemNumber(number: string | null | undefined): string {
   return number?.trim() || '—';
+}
+
+/** `null`/`undefined` render as an em dash so empty timeline fields read as "not yet", not "invalid". */
+export function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) return '—';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+export function formatDateTime(dateString: string | null | undefined): string {
+  if (!dateString) return '—';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export function getProblemPriorityBadgeClass(priority: ProblemPriority): string {
+  switch (priority) {
+    case 'CRITICAL':
+      return 'bg-red-500/10 text-red-700 dark:text-red-400';
+    case 'HIGH':
+      return 'bg-orange-500/10 text-orange-700 dark:text-orange-400';
+    case 'MEDIUM':
+      return 'bg-amber-500/10 text-amber-700 dark:text-amber-400';
+    case 'LOW':
+      return 'bg-gray-500/10 text-gray-700 dark:text-gray-400';
+  }
+}
+
+export function getRCATypeLabel(rcaType: RCAType): string {
+  switch (rcaType) {
+    case 'FIVE_WHYS':
+      return '5 Whys';
+    case 'FISHBONE':
+      return 'Fishbone';
+    case 'NONE':
+      return 'Not selected';
+  }
 }

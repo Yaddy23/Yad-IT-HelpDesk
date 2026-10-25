@@ -66,7 +66,8 @@ export interface UserFormInput {
 export interface UserOptions {
   departments: OrgRef[];
   locations: OrgRef[];
-  employees: { id: string; employeeId: string; name: string }[];
+  /** `id` is the Employee id; `userId` is the linked login account (null if none). */
+  employees: { id: string; employeeId: string; name: string; userId: string | null }[];
 }
 
 export const usersApi = {
