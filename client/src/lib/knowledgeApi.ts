@@ -101,8 +101,20 @@ export const knowledgeApi = {
     if (query.page) params.set('page', String(query.page));
     if (query.limit) params.set('limit', String(query.limit));
 
-    const res = await api.get<ApiEnvelope<ListArticlesResponse>>(`/knowledge?${params.toString()}`);
-    return res.data.data;
+    // GET /knowledge answers with the list envelope plus flat pagination:
+    // { data: ArticleSummary[], page, pages, total }.
+    const res = await api.get<{
+      data: KnowledgeArticleSummary[];
+      page: number;
+      pages: number;
+      total: number;
+    }>(`/knowledge?${params.toString()}`);
+    return {
+      articles: res.data.data,
+      page: res.data.page,
+      pages: res.data.pages,
+      total: res.data.total,
+    };
   },
 
   /**
