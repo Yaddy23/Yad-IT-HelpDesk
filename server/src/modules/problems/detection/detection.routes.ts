@@ -15,7 +15,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 
 import { requireAuth, requirePermission } from '../../../core/auth.js';
-import { notFound } from '../../../core/errors.js';
+import { recordAudit } from '../../../core/audit.js';
+import { badRequest, notFound } from '../../../core/errors.js';
 import { toAuthed } from '../../../core/request.js';
 import { prisma } from '../../../prisma/client.js';
 import { problemConfig } from '../config.js';
@@ -42,6 +43,8 @@ const fromIncidentsSchema = z.object({
 });
 
 const similarParamSchema = z.object({ params: z.object({ id: z.string().min(1) }) });
+
+const suggestionIdSchema = z.string().min(1);
 
 function windowStartFrom(hours: number): Date {
   return new Date(Date.now() - hours * 3_600_000);
@@ -106,6 +109,91 @@ detectionRouter.post('/from-incidents', requireAuth, requirePermission('problems
     const { incidentIds } = fromIncidentsSchema.parse(req.body ?? {});
     const problem = await createProblemFromIncidents(incidentIds, actor.id);
     res.status(201).json({ data: problem });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * GET /api/v1/problems/suggestions
+ * Pending detection suggestions for review, tenant-wide: the review queue the
+ * scheduled worker fills. Expired suggestions are hidden — they no longer
+ * describe the live window and the next scan replaces them.
+ */
+detectionRouter.get('/suggestions', requireAuth, requirePermission('problems:read'), async (_req, res, next) => {
+  try {
+    const suggestions = await prisma.detectionSuggestion.findMany({
+      where: { status: 'PENDING', expiresAt: { gt: new Date() } },
+      orderBy: [{ score: 'desc' }, { createdAt: 'asc' }],
+      take: 50,
+    });
+
+    // A suggestion stores only incident ids; reviewers decide from the rows.
+    const incidentIds = [...new Set(suggestions.flatMap((s) => s.incidentIds))];
+    const [incidents, problems] = await Promise.all([
+      incidentIds.length
+        ? prisma.ticket.findMany({
+            where: { id: { in: incidentIds } },
+            select: { id: true, number: true, title: true, status: true, category: true, createdAt: true },
+          })
+        : Promise.resolve([]),
+      prisma.problem.findMany({
+        where: { id: { in: suggestions.map((s) => s.problemId).filter((id): id is string => id !== null) } },
+        select: { id: true, number: true, title: true, status: true },
+      }),
+    ]);
+    const incidentsById = new Map(incidents.map((incident) => [incident.id, incident]));
+    const problemsById = new Map(problems.map((problem) => [problem.id, problem]));
+
+    res.json({
+      data: suggestions.map((suggestion) => ({
+        id: suggestion.id,
+        problemId: suggestion.problemId,
+        problem: suggestion.problemId ? problemsById.get(suggestion.problemId) ?? null : null,
+        score: suggestion.score,
+        matchReasons: suggestion.matchReasons,
+        incidents: suggestion.incidentIds
+          .map((id) => incidentsById.get(id))
+          .filter((incident): incident is (typeof incidents)[number] => incident !== undefined),
+        status: suggestion.status,
+        createdAt: suggestion.createdAt,
+        expiresAt: suggestion.expiresAt,
+      })),
+      meta: { count: suggestions.length },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * POST /api/v1/problems/suggestions/:id/reject
+ * Decline a suggestion: it leaves the queue and its incidents return to the
+ * claimable pool on the next scan.
+ */
+detectionRouter.post('/suggestions/:id/reject', requireAuth, requirePermission('problems:update'), async (req, res, next) => {
+  try {
+    const id = suggestionIdSchema.parse(req.params.id);
+    const actor = toAuthed(req).user!;
+    const updated = await prisma.detectionSuggestion.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'REJECTED', reviewedById: actor.id, reviewedAt: new Date() },
+    });
+    // updateMany over update: rejecting an already-answered suggestion is a
+    // 409 (someone else got there first), not a Prisma P2025 404.
+    if (updated.count === 0) {
+      const exists = await prisma.detectionSuggestion.findUnique({ where: { id }, select: { status: true } });
+      if (!exists) throw notFound('Suggestion not found');
+      throw badRequest(`Suggestion is already ${exists.status.toLowerCase()}`);
+    }
+    await recordAudit({
+      actorId: actor.id,
+      action: 'problem.suggestion_rejected',
+      targetType: 'DetectionSuggestion',
+      targetId: id,
+      ip: req.ip,
+    });
+    res.json({ data: { id, status: 'REJECTED' } });
   } catch (e) {
     next(e);
   }

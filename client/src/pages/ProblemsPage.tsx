@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 
 import { SearchIcon } from '@/components/icons';
 import { apiErrorMessage } from '@/lib/api';
+import DetectionSuggestionsPanel from '@/components/problems/DetectionSuggestionsPanel';
 import {
   useProblems,
   type ProblemStatus,
@@ -125,7 +126,9 @@ export default function ProblemsPage() {
         </Link>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1">
           {STATUSES.map((s) => (
             <button
@@ -189,7 +192,7 @@ export default function ProblemsPage() {
         </form>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-border bg-card">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         {problemsQuery.isLoading ? (
           <div className="space-y-2 p-5" aria-busy="true">
             {[...Array(5)].map((_, i) => (
@@ -268,7 +271,7 @@ export default function ProblemsPage() {
       </div>
 
       {meta && meta.pages > 1 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
             Page {meta.page} of {meta.pages} · {meta.total} problems
           </span>
@@ -292,6 +295,11 @@ export default function ProblemsPage() {
           </div>
         </div>
       )}
+        </div>
+        <aside aria-label="Detection suggestions">
+          <DetectionSuggestionsPanel />
+        </aside>
+      </div>
     </div>
   );
 }

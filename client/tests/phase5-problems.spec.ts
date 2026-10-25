@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { execSync } from 'node:child_process';
+import path from 'node:path';
+import { readFileSync } from 'node:fs';
 
 const DEMO_ADMIN = 'admin@demo.local';
 const DEMO_PASSWORD = 'ChangeMe!2026';
@@ -237,5 +240,138 @@ test.describe('Phase 5 - Adversarial/Negative Tests', () => {
     await submitBtn.click({ timeout: 2000 }).catch(() => {});
     // Navigation to the detail URL proves the create went through.
     await expect(page).toHaveURL(/\/problems\/[a-z0-9]{20,}$/, { timeout: 15000 });
+  });
+});
+
+test.describe('Phase 5 - Detection Suggestions & Find Related', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  const SUFFIX = String(Date.now() % 1_000_000);
+  // Free-string categories with unique tokens: the detection engine scores
+  // incidents against problems by category and symptom text, so a unique
+  // category guarantees no pre-existing problem claims the cluster and the
+  // time-pattern branch ("looks like a new problem") is the one that fires.
+  const CLUSTER_A_CATEGORY = `xylophone-outage-${SUFFIX}`;
+  const CLUSTER_B_CATEGORY = `zeppelin-sync-${SUFFIX}`;
+  const CLUSTER_A_TOKEN = 'xylophone calibration drift';
+  const CLUSTER_B_TOKEN = 'zeppelin sync lag';
+
+  let clusterANumbers: string[] = [];
+  let clusterBNumbers: string[] = [];
+  let clusterBFirstId = '';
+
+  /**
+   * Persisted suggestions only come from the engine's write half. The
+   * scheduled worker runs on a timer (minutes), so tests trigger the same
+   * runDetection through the one-off script the server ships for this purpose.
+   */
+  function runDetectionScan() {
+    // Playwright runs from client/, and specs are transpiled as ESM (no
+    // __dirname) — resolve the server one-off script from the cwd instead.
+    const serverDir = path.resolve(process.cwd(), '..', 'server');
+    execSync('npx tsx scripts/run-detection.ts 24', { cwd: serverDir, stdio: 'pipe', timeout: 120_000 });
+  }
+
+  async function seedTicket(
+    request: import('@playwright/test').APIRequestContext,
+    category: string,
+    token: string,
+    index: number,
+  ): Promise<{ id: string; number: string }> {
+    const state = JSON.parse(readFileSync('tests/auth-state.json', 'utf-8')) as {
+      origins: { localStorage: { name: string; value: string }[] }[];
+    };
+    const tokensEntry = state.origins.flatMap((o) => o.localStorage).find((e) => e.name === 'itsm.tokens');
+    const accessToken = tokensEntry ? (JSON.parse(tokensEntry.value) as { accessToken: string }).accessToken : '';
+    const res = await request.fetch('http://localhost:5173/api/v1/tickets', {
+      method: 'post',
+      data: {
+        title: `${token} report ${index} ${SUFFIX}`,
+        description: `Automated detection seed ${index}: ${token} observed again on the fleet.`,
+        category,
+        impact: 'low',
+        urgency: 'medium',
+      },
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    });
+    if (!res.ok()) test.skip(true, `could not seed ticket (${res.status()})`);
+    const body = (await res.json()) as { data: { id: string; number: string } };
+    return body.data;
+  }
+
+  test.beforeAll(async ({ request }) => {
+    test.setTimeout(180_000); // npx tsx cold start plus six ticket creates
+    for (let i = 1; i <= 3; i += 1) {
+      const ticket = await seedTicket(request, CLUSTER_A_CATEGORY, CLUSTER_A_TOKEN, i);
+      clusterANumbers.push(ticket.number);
+    }
+    for (let i = 1; i <= 3; i += 1) {
+      const ticket = await seedTicket(request, CLUSTER_B_CATEGORY, CLUSTER_B_TOKEN, i);
+      clusterBNumbers.push(ticket.number);
+      if (i === 1) clusterBFirstId = ticket.id;
+    }
+    runDetectionScan();
+  });
+
+  test('suggestions panel shows the detected cluster and accepting it creates a linked problem', async ({ page }) => {
+    await page.goto('/problems');
+    await waitForAuthRestore(page);
+    await expect(page.getByRole('heading', { name: 'Detection suggestions' })).toBeVisible({ timeout: 15000 });
+
+    // The cluster's suggestion carries all three incidents; find its row.
+    // `.first()`: each incident is itself an `li` nested inside the
+    // suggestion's `li`, so hasText matches both — the outer row comes first.
+    const suggestionRow = page.locator('li', { hasText: clusterANumbers[0] }).first();
+    await expect(suggestionRow).toBeVisible({ timeout: 15000 });
+    await expect(suggestionRow).toContainText('Looks like a new problem');
+    await expect(suggestionRow).toContainText('Recurring in a short window');
+
+    // Accept it: a problem is raised from the whole cluster.
+    await suggestionRow.getByRole('button', { name: 'Create problem' }).click();
+    await expect(page).toHaveURL(/\/problems\/[a-z0-9]{20,}$/, { timeout: 15000 });
+
+    // The new problem carries the full cluster.
+    await page.getByRole('tab', { name: 'Incidents' }).click();
+    for (const number of clusterANumbers) {
+      await expect(page.locator(`text=${number}`)).toBeVisible({ timeout: 10000 });
+    }
+  });
+
+  test('rejecting a suggestion removes it from the review queue', async ({ page }) => {
+    await page.goto('/problems');
+    await waitForAuthRestore(page);
+    await expect(page.getByRole('heading', { name: 'Detection suggestions' })).toBeVisible({ timeout: 15000 });
+
+    const suggestionRow = page.locator('li', { hasText: clusterBNumbers[0] }).first();
+    await expect(suggestionRow).toBeVisible({ timeout: 15000 });
+    await suggestionRow.getByRole('button', { name: 'Reject' }).click();
+    await expect(suggestionRow).toBeHidden({ timeout: 15000 });
+  });
+
+  test('manual find related: search, select, and create a problem from incidents', async ({ page }) => {
+    // Rejected suggestions never block their incidents, so the cluster-B
+    // tickets are still claimable through the manual flow.
+    await page.goto(`/tickets/${clusterBFirstId}`);
+    await waitForAuthRestore(page);
+    await page.click('button:has-text("Find related problems")');
+
+    const dialog = page.getByRole('dialog', { name: 'Find related incidents' });
+    await expect(dialog).toBeVisible();
+
+    // Search by symptom text; the second cluster ticket should appear.
+    await dialog.locator('input[type="search"]').fill(CLUSTER_B_TOKEN);
+    const otherRow = dialog.locator('label', { hasText: clusterBNumbers[1] });
+    await expect(otherRow).toBeVisible({ timeout: 10000 });
+    // The incident itself is always included and its checkbox disabled.
+    const selfRow = dialog.locator('label', { hasText: clusterBNumbers[0] });
+    await expect(selfRow.locator('input[type="checkbox"]')).toBeDisabled();
+
+    await otherRow.locator('input[type="checkbox"]').check();
+    await dialog.getByRole('button', { name: /Create problem \(2 incidents\)/ }).click();
+
+    await expect(page).toHaveURL(/\/problems\/[a-z0-9]{20,}$/, { timeout: 15000 });
+    await page.getByRole('tab', { name: 'Incidents' }).click();
+    await expect(page.locator(`text=${clusterBNumbers[0]}`).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator(`text=${clusterBNumbers[1]}`).first()).toBeVisible({ timeout: 10000 });
   });
 });

@@ -533,6 +533,15 @@ export class ProblemsService {
           actorId: user.id,
         },
       });
+
+      // Linking is an answer: any live suggestion proposing these incidents
+      // for this problem has been acted on. Leaving it pending would ask the
+      // reviewer twice (the same bookkeeping `createProblemFromIncidents`
+      // does when it accepts a suggestion).
+      await tx.detectionSuggestion.updateMany({
+        where: { status: 'PENDING', problemId: id, incidentIds: { hasSome: incidentIds } },
+        data: { status: 'ACCEPTED', reviewedById: user.id, reviewedAt: new Date() },
+      });
     });
 
     await recordAudit({

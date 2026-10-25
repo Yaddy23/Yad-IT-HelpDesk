@@ -292,6 +292,43 @@ export interface DetectQuery {
   threshold?: number;
 }
 
+/** A ticket row inside a detection suggestion — enough for a reviewer to judge. */
+export interface SuggestionIncident {
+  id: string;
+  number: string;
+  title: string;
+  status: string;
+  category: string;
+  createdAt: string;
+}
+
+/**
+ * One pending suggestion from the detection engine: a cluster of incidents
+ * that either resemble an existing `problem` (`problemId` set — accept links
+ * them to it) or look like a brand-new problem (`problemId` null — accept
+ * raises one from the incidents).
+ */
+export interface DetectionSuggestion {
+  id: string;
+  problemId: string | null;
+  problem: { id: string; number: string; title: string; status: string } | null;
+  score: number;
+  matchReasons: string[];
+  incidents: SuggestionIncident[];
+  status: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** Human-readable text for the engine's match reason keys. */
+export const MATCH_REASON_LABELS: Record<string, string> = {
+  same_service: 'Same service',
+  same_asset: 'Same asset',
+  symptom_similarity: 'Similar symptoms',
+  same_category: 'Same category',
+  time_pattern: 'Recurring in a short window',
+};
+
 export interface KnownErrorSummary {
   id: string;
   number: string;
@@ -531,6 +568,14 @@ export const problemApi = {
     return res.data.data;
   },
 
+  /** Pending detection suggestions for the review queue (tenant-wide). */
+  listSuggestions: async (): Promise<DetectionSuggestion[]> =>
+    (await api.get<ApiEnvelope<DetectionSuggestion[]>>(`${PROBLEMS_BASE}/suggestions`)).data.data,
+
+  /** Decline a suggestion — its incidents return to the claimable pool. */
+  rejectSuggestion: async (id: string): Promise<{ id: string; status: string }> =>
+    (await api.post<ApiEnvelope<{ id: string; status: string }>>(`${PROBLEMS_BASE}/suggestions/${id}/reject`)).data.data,
+
   // Known Errors
   /**
    * List known errors with pagination, filtering, and search.
@@ -609,6 +654,7 @@ export const problemKeys = {
   detail: (id: string) => [...problemKeys.details(), id] as const,
   audit: (id: string, query: GetAuditLogQuery) => [...problemKeys.detail(id), 'audit', query] as const,
   detect: (query: DetectQuery) => [...problemKeys.all, 'detect', query] as const,
+  suggestions: () => [...problemKeys.all, 'suggestions'] as const,
   similar: (id: string, query: SimilarProblemsQuery) => [...problemKeys.detail(id), 'similar', query] as const,
   knownErrors: {
     all: ['known-errors'] as const,
@@ -664,6 +710,16 @@ export function useKnownError(
     queryKey: problemKeys.knownErrors.detail(id),
     queryFn: () => problemApi.getKnownError(id),
     enabled: !!id,
+    ...options,
+  });
+}
+
+export function useDetectionSuggestions(
+  options?: Omit<UseQueryOptions<DetectionSuggestion[]>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: problemKeys.suggestions(),
+    queryFn: () => problemApi.listSuggestions(),
     ...options,
   });
 }
