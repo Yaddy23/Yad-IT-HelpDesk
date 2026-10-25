@@ -47,7 +47,12 @@ export default function FixVerificationWizard({
     );
   };
 
-  const canSubmit = step === 2 && confirmed && summary.trim().length >= 5;
+  // A change unlinked while the wizard is open must not be recorded as
+  // verified — verify against what is still linked, and block the submit if
+  // nothing is.
+  const verifiedChanges = selected.filter((id) => problem.changeRequestIds.includes(id));
+
+  const canSubmit = step === 2 && confirmed && summary.trim().length >= 5 && verifiedChanges.length > 0;
 
   return (
     <div
@@ -110,7 +115,7 @@ export default function FixVerificationWizard({
           <div className="mt-4 space-y-4">
             <p className="text-sm text-muted-foreground">
               Verifying against{' '}
-              <span className="font-mono">{selected.join(', ')}</span>.
+              <span className="font-mono">{verifiedChanges.join(', ')}</span>.
             </p>
             <label className="flex cursor-pointer items-start gap-2 text-sm">
               <input

@@ -134,9 +134,11 @@ export const unlinkChangeRequestSchema = z.object({
 export const changeEventSchema = z.object({
   body: z.object({
     event: z.string().min(1),
-    changeId: z.string().min(1),
-    status: z.string().optional(),
-    title: z.string().optional(),
+    // Opaque external id, but bounded: it lands in a Prisma array-contains
+    // query and in notification copy.
+    changeId: z.string().min(1).max(120),
+    status: z.string().max(120).optional(),
+    title: z.string().max(500).optional(),
   }),
 });
 

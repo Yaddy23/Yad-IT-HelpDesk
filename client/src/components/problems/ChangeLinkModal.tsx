@@ -33,16 +33,19 @@ export default function ChangeLinkModal({
     const id = draft.trim();
     setError(null);
     if (!id) return;
-    if (linked.has(id) || staged.includes(id)) {
-      setError(`Change ${id} is already linked or staged.`);
+    if (linked.has(id)) {
+      setError(`Change ${id} is already linked.`);
       return;
     }
-    setStaged((current) => [...current, id]);
+    // Dedupe inside the updater so a rapid double-click cannot stage the same
+    // id twice off stale state.
+    setStaged((current) => (current.includes(id) ? current : [...current, id]));
     setDraft('');
   };
 
   const linkMutation = useMutation({
     mutationFn: async () => {
+      // Snapshot: a chip removed mid-flight must not be linked anyway.
       for (const changeId of staged) {
         await problemApi.linkChangeRequest(problem.id, changeId);
       }
@@ -111,8 +114,9 @@ export default function ChangeLinkModal({
                   <button
                     type="button"
                     aria-label={`Remove ${changeId}`}
+                    disabled={linkMutation.isPending}
                     onClick={() => setStaged((current) => current.filter((c) => c !== changeId))}
-                    className="cursor-pointer text-muted-foreground hover:text-destructive"
+                    className="cursor-pointer text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     ×
                   </button>
@@ -141,7 +145,9 @@ export default function ChangeLinkModal({
             <button type="submit" disabled={staged.length === 0 || linkMutation.isPending} className={buttonPrimary}>
               {linkMutation.isPending
                 ? 'Linking…'
-                : `Link ${staged.length || ''} change${staged.length === 1 ? '' : 's'}`.trim()}
+                : staged.length === 1
+                  ? 'Link 1 change'
+                  : `Link ${staged.length} changes`}
             </button>
           </div>
         </form>
