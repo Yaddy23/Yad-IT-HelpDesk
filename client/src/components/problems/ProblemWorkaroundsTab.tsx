@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 
 import { apiErrorMessage } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import {
   problemApi,
   problemKeys,
@@ -28,6 +29,7 @@ interface Props {
  */
 export default function ProblemWorkaroundsTab({ problem, canManage }: Props) {
   const queryClient = useQueryClient();
+  const { hasAnyPermission } = useAuth();
   const [workaround, setWorkaround] = useState(problem.workaround ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -110,10 +112,22 @@ export default function ProblemWorkaroundsTab({ problem, canManage }: Props) {
       </form>
 
       <section className={`${cardBase} p-5`}>
-        <h2 className={sectionTitle}>Known errors from this problem</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Publishing a workaround as a known error makes it searchable for the service desk.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className={sectionTitle}>Known errors from this problem</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Publishing a workaround as a known error makes it searchable for the service desk.
+            </p>
+          </div>
+          {hasAnyPermission(['known_errors:create']) && (
+            <Link
+              to={`/known-errors/new?problemId=${problem.id}`}
+              className="cursor-pointer rounded-md border border-border bg-background px-3 py-1.5 text-sm transition-colors hover:border-ring hover:bg-muted"
+            >
+              New known error
+            </Link>
+          )}
+        </div>
 
         {knownErrorsQuery.isLoading ? (
           <div className="mt-4 space-y-2" aria-busy="true">

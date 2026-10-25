@@ -21,6 +21,9 @@ import TicketsPage from '@/pages/TicketsPage';
 import ProblemCreatePage from '@/pages/ProblemCreatePage';
 import ProblemDetailPage from '@/pages/ProblemDetailPage';
 import ProblemsPage from '@/pages/ProblemsPage';
+import KnownErrorCreatePage from '@/pages/KnownErrorCreatePage';
+import KnownErrorDetailPage from '@/pages/KnownErrorDetailPage';
+import KnownErrorsPage from '@/pages/KnownErrorsPage';
 import UsersPage from '@/pages/UsersPage';
 import CatalogAdminPage from '@/pages/CatalogAdminPage';
 import CatalogPage from '@/pages/CatalogPage';
@@ -84,6 +87,24 @@ export default function App() {
             path="problems/:id"
             element={<ProtectedRoute permissions={['problems:read']}>
               <ProblemDetailPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="known-errors"
+            element={<ProtectedRoute permissions={['known_errors:read']}>
+              <KnownErrorsPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="known-errors/new"
+            element={<ProtectedRoute permissions={['known_errors:create']}>
+              <KnownErrorCreatePage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="known-errors/:id"
+            element={<ProtectedRoute permissions={['known_errors:read']}>
+              <KnownErrorDetailPage />
             </ProtectedRoute>}
           />
           <Route path="notifications" element={<NotificationsPage />} />

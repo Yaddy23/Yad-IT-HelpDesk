@@ -818,6 +818,31 @@ export function getKnownErrorStatusBadgeClass(status: KnownErrorStatus): string 
   }
 }
 
+export const KNOWN_ERROR_STATUS_LABELS: Record<KnownErrorStatus, string> = {
+  DRAFT: 'Draft',
+  UNDER_REVIEW: 'Under Review',
+  PUBLISHED: 'Published',
+  RETIRED: 'Retired',
+};
+
+export const KNOWN_ERROR_VISIBILITY_LABELS: Record<KnownErrorVisibility, string> = {
+  IT_ONLY: 'IT only',
+  EMPLOYEE_SELF_SERVICE: 'Employee self-service',
+};
+
+/**
+ * Mirrors `KNOWN_ERROR_TRANSITIONS` in `server/src/modules/problems/config.ts`.
+ * The server is the authority and rejects anything absent here — this copy
+ * exists only so the UI offers valid moves instead of letting the user pick
+ * one that 409s.
+ */
+export const KNOWN_ERROR_TRANSITIONS: Record<KnownErrorStatus, KnownErrorStatus[]> = {
+  DRAFT: ['UNDER_REVIEW', 'RETIRED'],
+  UNDER_REVIEW: ['PUBLISHED', 'DRAFT', 'RETIRED'],
+  PUBLISHED: ['RETIRED'],
+  RETIRED: [],
+};
+
 /**
  * Problem numbers arrive from the server already display-ready
  * (`PRB-YYYY-NNNNNN`), so this normalizes rather than prefixes — prepending
