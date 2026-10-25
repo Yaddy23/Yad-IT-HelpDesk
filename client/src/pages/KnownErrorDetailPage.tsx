@@ -180,7 +180,8 @@ function DetailsView({ keId }: { keId: string }) {
           </select>
           {visibility === 'EMPLOYEE_SELF_SERVICE' && ke.status !== 'PUBLISHED' && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Employee visibility takes effect once the known error is published.
+              Employee visibility requires a published known error — saving with it selected is
+              rejected until approval publishes this error.
             </p>
           )}
         </div>
@@ -259,6 +260,7 @@ function ApprovalView({ keId }: { keId: string }) {
     onSuccess: () => {
       setError_(null);
       setReviewNotes('');
+      setTarget('');
       queryClient.invalidateQueries({ queryKey: problemKeys.knownErrors.detail(keId) });
       queryClient.invalidateQueries({ queryKey: problemKeys.knownErrors.lists() });
     },
@@ -427,6 +429,7 @@ export default function KnownErrorDetailPage() {
     onSuccess: () => {
       setPublishError(null);
       queryClient.invalidateQueries({ queryKey: problemKeys.knownErrors.detail(id ?? '') });
+      queryClient.invalidateQueries({ queryKey: problemKeys.knownErrors.lists() });
     },
     onError: (e) => setPublishError(apiErrorMessage(e, 'Failed to publish to knowledge base')),
   });
@@ -488,6 +491,11 @@ export default function KnownErrorDetailPage() {
             >
               {publishMutation.isPending ? 'Publishing…' : 'Publish to KB'}
             </button>
+            {ke.visibility === 'IT_ONLY' && (
+              <p className="mt-2 max-w-56 text-xs text-muted-foreground">
+                Publishing makes this known error visible to employees in the knowledge base.
+              </p>
+            )}
             {publishError && (
               <p role="alert" className="mt-2 text-sm text-destructive">
                 {publishError}

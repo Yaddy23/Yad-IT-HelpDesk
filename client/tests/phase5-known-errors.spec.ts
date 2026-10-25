@@ -1,23 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-const DEMO_ADMIN = 'admin@demo.local';
-const DEMO_PASSWORD = 'ChangeMe!2026';
-
 // The seeded admin holds every permission, so this spec exercises the full
 // lifecycle in one actor: create (known_errors:create), approve
 // (known_errors:approve), publish (known_errors:publish).
-
-async function loginAs(page: import('@playwright/test').Page, email: string) {
-  await page.goto('/login');
-  await page.fill('input[type="email"]', email);
-  await page.fill('input[type="password"]', DEMO_PASSWORD);
-  await Promise.all([
-    page.waitForURL(/\/(\?|$)/, { timeout: 60000 }),
-    page.click('button[type="submit"]'),
-  ]);
-  await page.waitForLoadState('networkidle');
-}
 
 async function waitForAuthRestore(page: import('@playwright/test').Page) {
   try {
@@ -149,10 +135,15 @@ test.describe('Phase 5 - Known Error Library', () => {
     await page.click('button:has-text("Apply transition")');
     await expect(page.locator('text=Under Review').first()).toBeVisible({ timeout: 10000 });
 
-    // Now PUBLISHED — the option list must re-derive from the new state.
+    // Now PUBLISHED — assert on the transitions re-derivation, not on any
+    // "Published" text (the old select's options could false-pass that).
     await page.selectOption('#ke-status-transition', 'PUBLISHED');
     await page.click('button:has-text("Apply transition")');
-    await expect(page.locator('text=Published').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#ke-status-transition option')).toHaveText(
+      ['Select a status…', 'Retired'],
+      { timeout: 10000 },
+    );
+    await expect(page.locator('span:has-text("Published")').first()).toBeVisible();
     await expect(page.locator('text=Owner:').first()).toBeVisible();
   });
 

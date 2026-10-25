@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -51,6 +51,18 @@ export default function KnownErrorCreatePage() {
 
   const effectiveProblemId = problemIdParam ?? pickedProblemId;
 
+  // Plan Step 5: pre-fill from the source problem. The form starts empty, so a
+  // single fill when the problem arrives never clobbers user input.
+  useEffect(() => {
+    if (!problem) return;
+    setTitle((current) => current || problem.title);
+    setRootCause((current) => current || problem.rootCause || '');
+    setWorkaround((current) => current || problem.workaround || '');
+    setAffectedServices((current) => current || problem.affectedServices.join(', '));
+    setAffectedAssets((current) => current || problem.affectedAssets.join(', '));
+    setAffectedCIs((current) => current || problem.affectedCIs.join(', '));
+  }, [problem]);
+
   const createMutation = useMutation({
     mutationFn: () =>
       problemApi.createKnownError({
@@ -60,9 +72,12 @@ export default function KnownErrorCreatePage() {
         symptoms,
         workaround,
         ...(resolutionNotes.trim() ? { resolutionNotes } : {}),
-        affectedServices: parseList(affectedServices),
-        affectedAssets: parseList(affectedAssets),
-        affectedCIs: parseList(affectedCIs),
+        // An empty field stays absent so the server falls back to the source
+        // problem's value instead of storing an explicit [] that no service
+        // search could ever match.
+        ...(parseList(affectedServices).length ? { affectedServices: parseList(affectedServices) } : {}),
+        ...(parseList(affectedAssets).length ? { affectedAssets: parseList(affectedAssets) } : {}),
+        ...(parseList(affectedCIs).length ? { affectedCIs: parseList(affectedCIs) } : {}),
         visibility,
       }),
     onSuccess: (created) => {
