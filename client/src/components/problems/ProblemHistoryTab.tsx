@@ -72,11 +72,11 @@ export default function ProblemHistoryTab({ problemId }: { problemId: string }) 
           <p role="alert" className="p-5 text-sm text-destructive">
             {apiErrorMessage(auditQuery.error, 'Failed to load history')}
           </p>
-        ) : auditQuery.data?.length === 0 ? (
+        ) : auditQuery.data?.data.length === 0 ? (
           <p className="p-10 text-center text-sm text-muted-foreground">No history yet.</p>
         ) : (
           <ol className="divide-y divide-border/60">
-            {auditQuery.data?.map((entry) => (
+            {auditQuery.data?.data.map((entry) => (
               <li key={entry.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
                 <span className="text-sm font-medium">{ACTION_LABELS[entry.action] ?? entry.action}</span>
                 <ChangeSummary oldValue={entry.oldValue} newValue={entry.newValue} />
@@ -89,7 +89,7 @@ export default function ProblemHistoryTab({ problemId }: { problemId: string }) 
         )}
       </div>
 
-      {auditQuery.data && auditQuery.data.length === PAGE_SIZE && (
+      {auditQuery.data && auditQuery.data.meta.pages > 1 && (
         <div className="flex justify-end gap-2 text-sm">
           <button
             type="button"
@@ -101,8 +101,9 @@ export default function ProblemHistoryTab({ problemId }: { problemId: string }) 
           </button>
           <button
             type="button"
+            disabled={page >= auditQuery.data.meta.pages}
             onClick={() => setPage((p) => p + 1)}
-            className="cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 transition-colors hover:border-ring/40"
+            className="cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 transition-colors hover:border-ring/40 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Next
           </button>

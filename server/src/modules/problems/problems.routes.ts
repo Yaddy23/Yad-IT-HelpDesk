@@ -84,7 +84,7 @@ problemsRouter.get('/:id/audit', async (req, res, next) => {
     const actor = toAuthed(req).user!;
     const { params, query } = getAuditLogSchema.parse({ params: req.params, query: req.query });
     const audit = await service.getAuditLog(actor, params.id, query);
-    res.json({ data: audit });
+    res.json(audit);
   } catch (e) {
     next(e);
   }

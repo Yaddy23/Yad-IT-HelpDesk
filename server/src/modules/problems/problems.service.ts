@@ -830,25 +830,35 @@ export class ProblemsService {
   }
 
   /**
-   * Get audit log for a problem.
+   * Get audit log for a problem, paged. Returns the entries plus the
+   * pagination meta so clients can render Next/Previous without guessing
+   * from the row count (a full last page would otherwise show a Next that
+   * leads to an empty page).
    */
   async getAuditLog(
     user: AuthedUser,
     id: string,
     query: { page: number; limit: number }
-  ): Promise<Prisma.ProblemAuditLogGetPayload<{ include: { actor: { select: { id: true; name: true; email: true } } } }>[]> {
+  ): Promise<{
+    data: Prisma.ProblemAuditLogGetPayload<{ include: { actor: { select: { id: true; name: true; email: true } } } }>[];
+    meta: { page: number; limit: number; total: number; pages: number };
+  }> {
     const problem = await prisma.problem.findUnique({ where: { id } });
     if (!problem) throw notFound('Problem not found');
     assertProblemAccess(user, problem);
 
     const { page, limit } = query;
-    return prisma.problemAuditLog.findMany({
-      where: { problemId: id },
-      include: { actor: { select: { id: true, name: true, email: true } } },
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const [total, data] = await Promise.all([
+      prisma.problemAuditLog.count({ where: { problemId: id } }),
+      prisma.problemAuditLog.findMany({
+        where: { problemId: id },
+        include: { actor: { select: { id: true, name: true, email: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+    return { data, meta: { page, limit, total, pages: Math.ceil(total / limit) || 1 } };
   }
 }
 

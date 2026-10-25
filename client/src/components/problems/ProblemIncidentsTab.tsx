@@ -232,7 +232,10 @@ export default function ProblemIncidentsTab({ problem, canLink }: Props) {
 
   const unlinkMutation = useMutation({
     mutationFn: (incidentId: string) => problemApi.unlinkIncident(problem.id, incidentId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: problemKeys.detail(problem.id) }),
+    onSuccess: () => {
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: problemKeys.detail(problem.id) });
+    },
     onError: (e) => setError(apiErrorMessage(e, 'Failed to unlink incident')),
   });
 

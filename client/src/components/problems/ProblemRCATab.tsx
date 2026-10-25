@@ -120,9 +120,13 @@ function FishboneEditor({
             maxLength={2000}
             value={category.causes.join('\n')}
             onChange={(e) =>
+              // Keep the raw lines while typing: sanitizing/filtering here
+              // would strip the newline (and trailing spaces) the user just
+              // typed out of the controlled value. Sanitization happens on
+              // save instead.
               setCategory(
                 index,
-                e.target.value.split('\n').map(sanitizeLine).filter(Boolean),
+                e.target.value.split('\n'),
               )
             }
             placeholder="One cause per line"
@@ -172,7 +176,16 @@ export default function ProblemRCATab({ problem, canManage }: Props) {
         ...(rcaType === 'FIVE_WHYS'
           ? { fiveWhys: { steps: fiveWhys.map((s) => sanitizeLine(s)).filter(Boolean) } }
           : {}),
-        ...(rcaType === 'FISHBONE' ? { fishbone } : {}),
+        ...(rcaType === 'FISHBONE'
+          ? {
+              fishbone: {
+                categories: fishbone.categories.map((category) => ({
+                  ...category,
+                  causes: category.causes.map(sanitizeLine).filter(Boolean),
+                })),
+              },
+            }
+          : {}),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: problemKeys.detail(problem.id) }),
     onError: (e) => setError(apiErrorMessage(e, 'Failed to save RCA')),

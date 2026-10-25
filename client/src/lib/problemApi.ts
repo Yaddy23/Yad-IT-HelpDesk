@@ -482,14 +482,20 @@ export const problemApi = {
     (await api.delete<ApiEnvelope<ProblemDetail>>(`${PROBLEMS_BASE}/${id}/changes/${changeId}`)).data.data,
 
   /**
-   * Get audit log for a problem.
+   * Get audit log for a problem. Returns the envelope's meta too (total,
+   * pages) so pagination can render a Next control only when one exists.
    */
-  getAuditLog: async (id: string, query: GetAuditLogQuery = {}): Promise<ProblemAuditLog[]> => {
+  getAuditLog: async (
+    id: string,
+    query: GetAuditLogQuery = {},
+  ): Promise<{ data: ProblemAuditLog[]; meta: { page: number; limit: number; total: number; pages: number } }> => {
     const params = new URLSearchParams();
     if (query.page) params.set('page', String(query.page));
     if (query.limit) params.set('limit', String(query.limit));
-    const res = await api.get<ApiEnvelope<ProblemAuditLog[]>>(`${PROBLEMS_BASE}/${id}/audit?${params.toString()}`);
-    return res.data.data;
+    const res = await api.get<{ data: ProblemAuditLog[]; meta: { page: number; limit: number; total: number; pages: number } }>(
+      `${PROBLEMS_BASE}/${id}/audit?${params.toString()}`,
+    );
+    return { data: res.data.data, meta: res.data.meta };
   },
 
   /**
