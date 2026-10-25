@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { apiErrorMessage } from '@/lib/api';
 import { catalogApi, requestsApi, type CatalogItem, type FormField } from '@/lib/serviceApi';

@@ -110,12 +110,6 @@ export default function ApprovalsPage() {
 
 /* ── Decide dialog ────────────────────────────────────────────────────────── */
 
-interface DelegateOption {
-  id: string;
-  name: string;
-  email: string;
-}
-
 function DecideDialog({
   entry,
   onClose,

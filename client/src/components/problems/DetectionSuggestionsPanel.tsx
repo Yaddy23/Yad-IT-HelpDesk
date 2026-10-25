@@ -29,6 +29,8 @@ export default function DetectionSuggestionsPanel() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: problemKeys.suggestions() });
     queryClient.invalidateQueries({ queryKey: problemKeys.lists() });
+    // The link path lands on an existing problem whose detail may be cached.
+    queryClient.invalidateQueries({ queryKey: problemKeys.details() });
   };
 
   const acceptMutation = useMutation({

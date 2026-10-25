@@ -156,7 +156,7 @@ export default function ProblemCreatePage() {
             {usersData
               ?.filter((u) => u.userId)
               .map((u) => (
-                <option key={u.userId} value={u.userId}>
+                <option key={u.userId} value={u.userId ?? ''}>
                   {u.name}
                 </option>
               ))}

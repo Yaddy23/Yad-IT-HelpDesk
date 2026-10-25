@@ -126,7 +126,8 @@ export default function TicketDetailPage() {
   const canClose = hasAnyPermission(['tickets:close']);
   const canAssign = hasAnyPermission(['tickets:assign']);
   const canWorknotes = hasAnyPermission(['tickets:worknotes']);
-  const canSeeProblems = hasAnyPermission(['problems:read']);
+  // The modal's only action (create problem from incidents) needs problems:create.
+  const canSeeProblems = hasAnyPermission(['problems:create']);
   const isRequester = t.requester.id === user?.employee?.id;
 
   const doTransition = (status: 'in_progress' | 'pending_employee' | 'pending_vendor' | 'resolved' | 'closed') => {

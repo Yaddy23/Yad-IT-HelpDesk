@@ -74,7 +74,7 @@ const MANAGER_ROLES = ['it_manager', 'it_admin', 'super_admin'];
  * granted to it_technician too (spec Section 8 grants it to the record owner),
  * so testing that permission would silently disable all scoping.
  */
-function isManagerRole(user: AuthedUser): boolean {
+export function isManagerRole(user: AuthedUser): boolean {
   return user.roles.some((role) => MANAGER_ROLES.includes(role));
 }
 

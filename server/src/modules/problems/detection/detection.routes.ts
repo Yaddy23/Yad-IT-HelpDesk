@@ -16,10 +16,12 @@ import { z } from 'zod';
 
 import { requireAuth, requirePermission } from '../../../core/auth.js';
 import { recordAudit } from '../../../core/audit.js';
-import { badRequest, notFound } from '../../../core/errors.js';
+import { conflict, notFound } from '../../../core/errors.js';
 import { toAuthed } from '../../../core/request.js';
 import { prisma } from '../../../prisma/client.js';
 import { problemConfig } from '../config.js';
+import { isManagerRole } from '../problems.service.js';
+import { ticketScopeWhere } from '../../tickets/tickets.service.js';
 import { DETECTION_CRITERIA } from './criteria.js';
 import { createProblemFromIncidents, findSimilarToProblem, scanWindow } from './detectionEngine.js';
 import { explainIncidentAgainstProblem, incidentCriteriaFromTicket, problemCriteriaFromProblem } from './scoring.js';
@@ -116,12 +118,19 @@ detectionRouter.post('/from-incidents', requireAuth, requirePermission('problems
 
 /**
  * GET /api/v1/problems/suggestions
- * Pending detection suggestions for review, tenant-wide: the review queue the
- * scheduled worker fills. Expired suggestions are hidden — they no longer
- * describe the live window and the next scan replaces them.
+ * Pending detection suggestions for review: the review queue the scheduled
+ * worker fills. Expired suggestions are hidden — they no longer describe the
+ * live window and the next scan replaces them.
+ *
+ * Record-level scope follows the rest of the module: managers see the whole
+ * queue; technicians only what they could act on — suggestions pointing at a
+ * problem they own, and clusters whose incidents they are allowed to view
+ * (`ticketScopeWhere`, the same predicate ticket lists use).
  */
-detectionRouter.get('/suggestions', requireAuth, requirePermission('problems:read'), async (_req, res, next) => {
+detectionRouter.get('/suggestions', requireAuth, requirePermission('problems:read'), async (req, res, next) => {
   try {
+    const actor = toAuthed(req).user!;
+    const manager = isManagerRole(actor);
     const suggestions = await prisma.detectionSuggestion.findMany({
       where: { status: 'PENDING', expiresAt: { gt: new Date() } },
       orderBy: [{ score: 'desc' }, { createdAt: 'asc' }],
@@ -133,20 +142,36 @@ detectionRouter.get('/suggestions', requireAuth, requirePermission('problems:rea
     const [incidents, problems] = await Promise.all([
       incidentIds.length
         ? prisma.ticket.findMany({
-            where: { id: { in: incidentIds } },
+            where: manager
+              ? { id: { in: incidentIds } }
+              : { id: { in: incidentIds }, AND: [await ticketScopeWhere(actor)] },
             select: { id: true, number: true, title: true, status: true, category: true, createdAt: true },
           })
         : Promise.resolve([]),
       prisma.problem.findMany({
-        where: { id: { in: suggestions.map((s) => s.problemId).filter((id): id is string => id !== null) } },
+        where: {
+          id: { in: suggestions.map((s) => s.problemId).filter((id): id is string => id !== null) },
+          ...(manager ? {} : { ownerId: actor.id }),
+        },
         select: { id: true, number: true, title: true, status: true },
       }),
     ]);
     const incidentsById = new Map(incidents.map((incident) => [incident.id, incident]));
     const problemsById = new Map(problems.map((problem) => [problem.id, problem]));
 
+    // Non-managers keep only rows they can act on: a linked-problem suggestion
+    // needs a problem they own, and a new-problem suggestion needs every
+    // incident of the cluster visible — creating a problem from a cluster they
+    // cannot fully see would act on information they were never shown.
+    const scoped = manager
+      ? suggestions
+      : suggestions.filter((suggestion) => {
+          if (suggestion.problemId) return problemsById.has(suggestion.problemId);
+          return suggestion.incidentIds.every((id) => incidentsById.has(id));
+        });
+
     res.json({
-      data: suggestions.map((suggestion) => ({
+      data: scoped.map((suggestion) => ({
         id: suggestion.id,
         problemId: suggestion.problemId,
         problem: suggestion.problemId ? problemsById.get(suggestion.problemId) ?? null : null,
@@ -159,7 +184,7 @@ detectionRouter.get('/suggestions', requireAuth, requirePermission('problems:rea
         createdAt: suggestion.createdAt,
         expiresAt: suggestion.expiresAt,
       })),
-      meta: { count: suggestions.length },
+      meta: { count: scoped.length },
     });
   } catch (e) {
     next(e);
@@ -184,7 +209,7 @@ detectionRouter.post('/suggestions/:id/reject', requireAuth, requirePermission('
     if (updated.count === 0) {
       const exists = await prisma.detectionSuggestion.findUnique({ where: { id }, select: { status: true } });
       if (!exists) throw notFound('Suggestion not found');
-      throw badRequest(`Suggestion is already ${exists.status.toLowerCase()}`);
+      throw conflict(`Suggestion is already ${exists.status.toLowerCase()}`);
     }
     await recordAudit({
       actorId: actor.id,
