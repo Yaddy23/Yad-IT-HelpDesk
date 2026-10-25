@@ -63,6 +63,25 @@ problemsRouter.post('/', requirePermission('problems:create'), async (req, res, 
 });
 
 /**
+ * GET /api/v1/problems/dashboard
+ * Aggregated dashboard data for KPI tiles and charts (spec Section 7).
+ * Must be before /:id to avoid route collision.
+ */
+problemsRouter.get('/dashboard', async (req, res, next) => {
+  try {
+    const actor = toAuthed(req).user!;
+    const { query } = listProblemsQuerySchema.parse({ query: req.query });
+    const days = query.identifiedAfter
+      ? Math.ceil((Date.now() - new Date(query.identifiedAfter).getTime()) / (24 * 60 * 60 * 1000))
+      : 30;
+    const dashboard = await service.getDashboard(actor, Math.min(Math.max(days, 1), 365));
+    res.json({ data: dashboard });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
  * GET /api/v1/problems/:id
  * Get a single problem by ID with full detail.
  */

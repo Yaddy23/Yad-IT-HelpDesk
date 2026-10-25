@@ -293,3 +293,24 @@ export const AlertTriangleIcon = (p: IconProps) => (
     <path d="M12 9v4M12 17h.01" />
   </svg>
 );
+
+export const TrendingUpIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M22 18H12a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2z" />
+    <path d="m22 13-5-5-4 4-3-3-2 2" />
+  </svg>
+);
+
+export const AlertCircleIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 8v4M12 16h.01" />
+  </svg>
+);
+
+export const CheckCircleIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+);

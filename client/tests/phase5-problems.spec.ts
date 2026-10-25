@@ -539,3 +539,70 @@ test.describe('Phase 5 - Change Integration & Fix Verification', () => {
     await context.close();
   });
 });
+
+test.describe('Phase 5 - Problems Dashboard', () => {
+  test('dashboard page loads and is reachable from nav', async ({ page }) => {
+    await page.goto('/');
+    await waitForAuthRestore(page);
+    // Click Problems Dashboard in the nav
+    await page.click('a[href="/problems/dashboard"], nav >> text=Problems Dashboard');
+    await expect(page.locator('h1')).toContainText('Problems Dashboard');
+    // Wait for page to fully load (skeleton disappears)
+    await expect(page.locator('.animate-pulse').first()).toBeHidden({ timeout: 15000 });
+  });
+
+  test('dashboard renders KPI stat tiles and charts', async ({ page }) => {
+    await page.goto('/problems/dashboard');
+    await waitForAuthRestore(page);
+    await expect(page.locator('h1')).toContainText('Problems Dashboard');
+    // Wait for loading to complete
+    await expect(page.locator('.animate-pulse').first()).toBeHidden({ timeout: 15000 });
+    // KPI tiles should be present - use link role to avoid collision with chart titles
+    await expect(page.getByRole('link', { name: 'Open Problems' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Overdue Investigations' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Problems with Known Error' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Fix Verified Rate' })).toBeVisible();
+    // Charts should be present - use heading role for chart titles to avoid collision with page description
+    await expect(page.getByRole('heading', { name: 'Problems Identified (Daily)' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Top Incident Categories' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Open Problems by Age' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Problems by Status' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Known Errors by Status' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Fix Effectiveness' })).toBeVisible();
+  });
+
+  test('date range selector changes the dashboard data', async ({ page }) => {
+    await page.goto('/problems/dashboard');
+    await waitForAuthRestore(page);
+    await expect(page.locator('.animate-pulse').first()).toBeHidden({ timeout: 15000 });
+    // Change the range - this should trigger a refetch
+    await page.selectOption('#dashboard-range', '7');
+    // Loading spinner may appear briefly
+    await page.waitForTimeout(500);
+    await expect(page.locator('.animate-pulse').first()).toBeHidden({ timeout: 15000 });
+    // Page should still be responsive
+    await expect(page.locator('h1')).toContainText('Problems Dashboard');
+  });
+
+  test('KPI tiles are clickable links to relevant list views', async ({ page }) => {
+    await page.goto('/problems/dashboard');
+    await waitForAuthRestore(page);
+    await expect(page.locator('.animate-pulse').first()).toBeHidden({ timeout: 15000 });
+    // Click Open Problems tile
+    const openTile = page.locator('a:has-text("Open Problems")').first();
+    await expect(openTile).toBeVisible();
+    await openTile.click();
+    // Should navigate to problems list with open status filter
+    await expect(page).toHaveURL(/\/problems/);
+    await expect(page.locator('h1')).toContainText('Problems');
+  });
+
+  test('dashboard works for unauthenticated user (redirects to login)', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await context.newPage();
+    await page.goto('/problems/dashboard');
+    // Should redirect to login
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    await context.close();
+  });
+});

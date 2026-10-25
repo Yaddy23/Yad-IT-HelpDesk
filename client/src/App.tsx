@@ -21,6 +21,7 @@ import TicketsPage from '@/pages/TicketsPage';
 import ProblemCreatePage from '@/pages/ProblemCreatePage';
 import ProblemDetailPage from '@/pages/ProblemDetailPage';
 import ProblemsPage from '@/pages/ProblemsPage';
+import ProblemsDashboardPage from '@/pages/ProblemsDashboardPage';
 import KnownErrorCreatePage from '@/pages/KnownErrorCreatePage';
 import KnownErrorDetailPage from '@/pages/KnownErrorDetailPage';
 import KnownErrorsPage from '@/pages/KnownErrorsPage';
@@ -87,6 +88,12 @@ export default function App() {
             path="problems/:id"
             element={<ProtectedRoute permissions={['problems:read']}>
               <ProblemDetailPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="problems/dashboard"
+            element={<ProtectedRoute permissions={['problems:read']}>
+              <ProblemsDashboardPage />
             </ProtectedRoute>}
           />
           <Route

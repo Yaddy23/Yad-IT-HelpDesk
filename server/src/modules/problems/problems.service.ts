@@ -869,6 +869,142 @@ export class ProblemsService {
     ]);
     return { data, meta: { page, limit, total, pages: Math.ceil(total / limit) || 1 } };
   }
+
+  /**
+   * Aggregated dashboard data (spec Phase 5): recurring trends, major causes
+   * (Pareto), problem aging, overdue investigations, status distribution,
+   * known-error usage, fix effectiveness. Same RBAC scope as list —
+   * managers see the whole estate, technicians their own problems.
+   */
+  async getDashboard(user: AuthedUser, days: number): Promise<{
+    trends: { date: string; problems: number }[];
+    topCauses: { name: string; count: number }[];
+    aging: { bucket: string; count: number }[];
+    overdue: number;
+    open: number;
+    statusDistribution: { status: string; count: number }[];
+    knownErrors: { byStatus: { status: string; count: number }[]; problemsWithKnownError: number };
+    fixEffectiveness: { resolved: number; verifiedFix: number; exception: number };
+  }> {
+    const scope: Prisma.ProblemWhereInput[] = [{ deletedAt: null }];
+    if (!isManagerRole(user)) scope.push({ ownerId: user.id });
+
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const now = new Date();
+
+    const [
+      recent,
+      all,
+      overdueCount,
+      openCount,
+      statusRows,
+      keByStatus,
+      keLinkedCount,
+      resolveAudits,
+    ] = await Promise.all([
+      // Trend series: problems identified per day in the window. groupBy can't
+      // bucket by date, so tally minimal rows in JS.
+      prisma.problem.findMany({
+        where: { AND: scope, identifiedAt: { gte: since } },
+        select: { identifiedAt: true },
+      }).then((identified) => {
+        const perDay = new Map<string, number>();
+        for (let i = days - 1; i >= 0; i -= 1) {
+          const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+          perDay.set(d.toISOString().slice(0, 10), 0);
+        }
+        for (const p of identified) {
+          const key = p.identifiedAt.toISOString().slice(0, 10);
+          if (perDay.has(key)) perDay.set(key, (perDay.get(key) ?? 0) + 1);
+        }
+        return [...perDay.entries()].map(([date, problems]) => ({ date, problems }));
+      }),
+      // Aging + Pareto need every open problem's dates and linked categories.
+      prisma.problem.findMany({
+        where: { AND: scope, status: { notIn: ['RESOLVED', 'CLOSED'] as ProblemStatus[] } },
+        select: {
+          identifiedAt: true,
+          incidents: { select: { incident: { select: { category: true } } } },
+        },
+      }),
+      prisma.problem.count({ where: { AND: scope, reviewDueAt: { lt: now } } }),
+      prisma.problem.count({
+        where: { AND: scope, status: { notIn: ['RESOLVED', 'CLOSED'] as ProblemStatus[] } },
+      }),
+      prisma.problem.groupBy({ by: ['status'], where: { AND: scope }, _count: { _all: true } }),
+      prisma.knownError.groupBy({ by: ['status'], _count: { _all: true } }),
+      prisma.problem.count({
+        where: { AND: scope, knownError: { isNot: null } },
+      }),
+      // Fix effectiveness: latest RESOLVED transition per problem, from the
+      // audit trail (verifiedFix is recorded there, not as a column).
+      prisma.problemAuditLog.findMany({
+        where: { action: 'STATUS_CHANGED', problem: { is: { AND: scope } } },
+        select: { problemId: true, newValue: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const topCauses = (() => {
+      const tally = new Map<string, number>();
+      for (const problem of all) {
+        for (const link of problem.incidents) {
+          const category = link.incident.category?.trim();
+          if (category) tally.set(category, (tally.get(category) ?? 0) + 1);
+        }
+      }
+      const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1]);
+      const top = sorted.slice(0, 8).map(([name, count]) => ({ name, count }));
+      const rest = sorted.slice(8).reduce((sum, [, count]) => sum + count, 0);
+      return rest > 0 ? [...top, { name: 'Other', count: rest }] : top;
+    })();
+
+    const aging = (() => {
+      const buckets = [
+        { bucket: '< 7 days', min: 0, max: 7 },
+        { bucket: '7–30 days', min: 7, max: 30 },
+        { bucket: '30–90 days', min: 30, max: 90 },
+        { bucket: '90+ days', min: 90, max: Infinity },
+      ].map((b) => ({ bucket: b.bucket, count: 0, min: b.min, max: b.max }));
+      for (const problem of all) {
+        const ageDays = (now.getTime() - problem.identifiedAt.getTime()) / (24 * 60 * 60 * 1000);
+        const hit = buckets.find((b) => ageDays >= b.min && ageDays < b.max);
+        if (hit) hit.count += 1;
+      }
+      return buckets.map(({ bucket, count }) => ({ bucket, count }));
+    })();
+
+    const resolvedTransitions = new Map<string, { verifiedFix?: boolean; exceptionReason?: string }>();
+    for (const log of resolveAudits) {
+      const value = log.newValue as { status?: string; verifiedFix?: boolean; exceptionReason?: string };
+      if (value?.status === 'RESOLVED' && !resolvedTransitions.has(log.problemId)) {
+        resolvedTransitions.set(log.problemId, value);
+      }
+    }
+    const fixEffectiveness = (() => {
+      let verifiedFix = 0;
+      let exception = 0;
+      for (const value of resolvedTransitions.values()) {
+        if (value.verifiedFix) verifiedFix += 1;
+        else exception += 1;
+      }
+      return { resolved: resolvedTransitions.size, verifiedFix, exception };
+    })();
+
+    return {
+      trends: recent,
+      topCauses,
+      aging,
+      overdue: overdueCount,
+      open: openCount,
+      statusDistribution: statusRows.map((row) => ({ status: row.status, count: row._count._all })),
+      knownErrors: {
+        byStatus: keByStatus.map((row) => ({ status: row.status, count: row._count._all })),
+        problemsWithKnownError: keLinkedCount,
+      },
+      fixEffectiveness,
+    };
+  }
 }
 
 export type { ProblemDetail, ProblemSummary };

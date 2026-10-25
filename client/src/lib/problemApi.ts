@@ -153,6 +153,21 @@ export interface ProblemDetail extends ProblemSummary {
   auditLogs: ProblemAuditLog[];
 }
 
+/** Aggregated dashboard data returned by GET /problems/dashboard. */
+export interface ProblemDashboard {
+  trends: { date: string; problems: number }[];
+  topCauses: { name: string; count: number }[];
+  aging: { bucket: string; count: number }[];
+  overdue: number;
+  open: number;
+  statusDistribution: { status: string; count: number }[];
+  knownErrors: {
+    byStatus: { status: string; count: number }[];
+    problemsWithKnownError: number;
+  };
+  fixEffectiveness: { resolved: number; verifiedFix: number; exception: number };
+}
+
 /** A problem an incident resembles, as ranked by the detection engine. */
 export interface IncidentMatch {
   problemId: string;
@@ -568,6 +583,16 @@ export const problemApi = {
     return res.data.data;
   },
 
+  /**
+   * Get aggregated dashboard data for KPI tiles and charts.
+   */
+  getDashboard: async (days = 30): Promise<ProblemDashboard> => {
+    const params = new URLSearchParams();
+    params.set('identifiedAfter', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString());
+    const res = await api.get<ApiEnvelope<ProblemDashboard>>(`${PROBLEMS_BASE}/dashboard?${params.toString()}`);
+    return res.data.data;
+  },
+
   /** Pending detection suggestions for the review queue (tenant-wide). */
   listSuggestions: async (): Promise<DetectionSuggestion[]> =>
     (await api.get<ApiEnvelope<DetectionSuggestion[]>>(`${PROBLEMS_BASE}/suggestions`)).data.data,
@@ -656,6 +681,7 @@ export const problemKeys = {
   detect: (query: DetectQuery) => [...problemKeys.all, 'detect', query] as const,
   suggestions: () => [...problemKeys.all, 'suggestions'] as const,
   similar: (id: string, query: SimilarProblemsQuery) => [...problemKeys.detail(id), 'similar', query] as const,
+  dashboard: (days?: number) => [...problemKeys.all, 'dashboard', days] as const,
   knownErrors: {
     all: ['known-errors'] as const,
     lists: () => [...problemKeys.knownErrors.all, 'list'] as const,
@@ -720,6 +746,17 @@ export function useDetectionSuggestions(
   return useQuery({
     queryKey: problemKeys.suggestions(),
     queryFn: () => problemApi.listSuggestions(),
+    ...options,
+  });
+}
+
+export function useDashboard(
+  days?: number,
+  options?: Omit<UseQueryOptions<ProblemDashboard>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: problemKeys.dashboard(days),
+    queryFn: () => problemApi.getDashboard(days),
     ...options,
   });
 }
