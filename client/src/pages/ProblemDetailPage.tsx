@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 
-import { AlertTriangleIcon, BugIcon, BrainIcon, HistoryIcon, LinkIcon, WrenchIcon } from '@/components/icons';
+import { AlertTriangleIcon, BugIcon, BrainIcon, GitBranchIcon, HistoryIcon, LinkIcon, WrenchIcon } from '@/components/icons';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import {
@@ -25,6 +25,8 @@ import ProblemDetailsTab from '@/components/problems/ProblemDetailsTab';
 import ProblemIncidentsTab from '@/components/problems/ProblemIncidentsTab';
 import ProblemRCATab from '@/components/problems/ProblemRCATab';
 import ProblemWorkaroundsTab from '@/components/problems/ProblemWorkaroundsTab';
+import ProblemChangesTab from '@/components/problems/ProblemChangesTab';
+import FixVerificationWizard from '@/components/problems/FixVerificationWizard';
 import ProblemHistoryTab from '@/components/problems/ProblemHistoryTab';
 import { badgeBase, buttonPrimary, inputBase, labelBase } from '@/components/problems/styles';
 
@@ -33,6 +35,7 @@ const TABS = [
   { key: 'incidents', label: 'Incidents', icon: LinkIcon },
   { key: 'rca', label: 'RCA', icon: BrainIcon },
   { key: 'workarounds', label: 'Workarounds', icon: WrenchIcon },
+  { key: 'changes', label: 'Changes', icon: GitBranchIcon },
   { key: 'history', label: 'History', icon: HistoryIcon },
 ] as const;
 
@@ -165,6 +168,7 @@ export default function ProblemDetailPage() {
   const activeTab: TabKey = isValidTab(tabParam) ? tabParam : 'details';
 
   const [showResolveDialog, setShowResolveDialog] = useState(false);
+  const [showFixWizard, setShowFixWizard] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
 
   const problemQuery = useProblem(id!);
@@ -216,6 +220,8 @@ export default function ProblemDetailPage() {
   const canTransition = hasPermission('problems:transition');
   const canLink = hasPermission('problems:link_incidents');
   const canManageRca = hasPermission('problems:manage_rca');
+  // Change linking and unlinking require problems:update on the server.
+  const canManageChanges = hasPermission('problems:update');
 
   return (
     <div className="max-w-4xl">
@@ -251,6 +257,15 @@ export default function ProblemDetailPage() {
             onChange={(e) => {
               const target = e.target.value as ProblemStatus;
               if (!target) return;
+              // RESOLVED collects its inputs in a dialog (plain path) or the
+              // fix-verification wizard (linked changes) — the requirements
+              // check does not apply to it, it would always be "missing".
+              if (target === 'RESOLVED') {
+                setStatusError(null);
+                if (problem.changeRequestIds.length > 0) setShowFixWizard(true);
+                else setShowResolveDialog(true);
+                return;
+              }
               const missing = missingRequirements(target);
               if (missing.length > 0) {
                 setStatusError(
@@ -259,8 +274,7 @@ export default function ProblemDetailPage() {
                 return;
               }
               setStatusError(null);
-              if (target === 'RESOLVED') setShowResolveDialog(true);
-              else transitionMutation.mutate(target);
+              transitionMutation.mutate(target);
             }}
             disabled={transitionMutation.isPending}
             className="cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm transition-colors hover:border-ring/40 disabled:cursor-not-allowed disabled:opacity-40"
@@ -322,11 +336,15 @@ export default function ProblemDetailPage() {
         {activeTab === 'workarounds' && (
           <ProblemWorkaroundsTab problem={problem} canManage={canManageRca} />
         )}
+        {activeTab === 'changes' && <ProblemChangesTab problem={problem} canLink={canManageChanges} />}
         {activeTab === 'history' && <ProblemHistoryTab problemId={problem.id} />}
       </div>
 
       {showResolveDialog && (
         <ResolveDialog problem={problem} onClose={() => setShowResolveDialog(false)} />
+      )}
+      {showFixWizard && (
+        <FixVerificationWizard problem={problem} onClose={() => setShowFixWizard(false)} />
       )}
     </div>
   );

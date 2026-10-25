@@ -125,6 +125,21 @@ export const unlinkChangeRequestSchema = z.object({
   body: z.object({}),
 });
 
+/**
+ * Inbound change event (spec Section 5.4). There is no change-management
+ * module here — an external change system would post to this webhook seam.
+ * The consumer validates the event name itself and ignores unknowns, so the
+ * schema only pins the transport shape.
+ */
+export const changeEventSchema = z.object({
+  body: z.object({
+    event: z.string().min(1),
+    changeId: z.string().min(1),
+    status: z.string().optional(),
+    title: z.string().optional(),
+  }),
+});
+
 export const getAuditLogSchema = z.object({
   params: z.object({ id: z.string().min(1) }),
   query: z.object({

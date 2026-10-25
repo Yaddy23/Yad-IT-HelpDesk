@@ -375,3 +375,167 @@ test.describe('Phase 5 - Detection Suggestions & Find Related', () => {
     await expect(page.locator(`text=${clusterBNumbers[1]}`).first()).toBeVisible({ timeout: 10000 });
   });
 });
+
+test.describe('Phase 5 - Change Integration & Fix Verification', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  const SUFFIX = String(Date.now() % 1_000_000);
+  const CHANGE_ID = `CHG-E2E-${SUFFIX}`;
+  const PROBLEM_TITLE = `change-integration printer queue ${SUFFIX}`;
+
+  let problemId = '';
+  let problemNumber = '';
+  // The access token the API helpers use (spec reads it from storageState).
+  const AUTH = (() => {
+    const state = JSON.parse(readFileSync('tests/auth-state.json', 'utf-8')) as {
+      origins: { localStorage: { name: string; value: string }[] }[];
+    };
+    const entry = state.origins.flatMap((o) => o.localStorage).find((e) => e.name === 'itsm.tokens');
+    const token = entry ? (JSON.parse(entry.value) as { accessToken: string }).accessToken : '';
+    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  })();
+
+  test.beforeAll(async ({ request }) => {
+    test.setTimeout(120_000);
+    const me = await request.fetch('http://localhost:5173/api/v1/auth/me', { headers: AUTH });
+    if (!me.ok()) test.skip(true, `could not read current user (${me.status()})`);
+    const meBody = (await me.json()) as { data: { id: string } };
+
+    const res = await request.fetch('http://localhost:5173/api/v1/problems', {
+      method: 'post',
+      data: {
+        title: PROBLEM_TITLE,
+        description: `Problem driving the ${CHANGE_ID} change integration flow.`,
+        ownerId: meBody.data.id,
+        priority: 'MEDIUM',
+        businessImpact: 'Demo impact',
+        affectedServices: [`printer-svc-${SUFFIX}`],
+        affectedAssets: [],
+        affectedCIs: [],
+      },
+      headers: AUTH,
+    });
+    if (!res.ok()) test.skip(true, `could not seed problem (${res.status()})`);
+    const body = (await res.json()) as { data: { id: string; number: string } };
+    problemId = body.data.id;
+    problemNumber = body.data.number;
+  });
+
+  /** Fire a change event through the webhook seam; returns how many were notified. */
+  async function fireChangeEvent(
+    request: import('@playwright/test').APIRequestContext,
+    event: string,
+    changeId: string,
+  ): Promise<number> {
+    const res = await request.fetch('http://localhost:5173/api/v1/problems/change-events', {
+      method: 'post',
+      data: { event, changeId },
+      headers: AUTH,
+    });
+    expect(res.ok()).toBeTruthy();
+    const body = (await res.json()) as { data: { notified: number } };
+    return body.data.notified;
+  }
+
+  test('changes tab starts empty; empty link form guards submit', async ({ page }) => {
+    await page.goto(`/problems/${problemId}`);
+    await waitForAuthRestore(page);
+    await page.getByRole('tab', { name: 'Changes' }).click();
+
+    await expect(page.locator('text=No change requests linked')).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Link change' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Link change requests' });
+    await expect(dialog).toBeVisible();
+    // No id staged — the link submit must be disabled (adversarial: empty input).
+    await expect(dialog.getByRole('button', { name: /Link/ })).toBeDisabled();
+    await dialog.locator('#change-id-input').fill(CHANGE_ID);
+    await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(dialog.locator(`text=${CHANGE_ID}`)).toBeVisible();
+    await dialog.getByRole('button', { name: /Link 1 change/ }).click();
+    // The chip alone would satisfy a text assertion before the link commits —
+    // wait for the modal to close, which only happens on success.
+    await expect(dialog).toBeHidden({ timeout: 15000 });
+    await expect(page.locator(`text=${CHANGE_ID}`)).toBeVisible({ timeout: 10000 });
+  });
+
+  test('change.implemented notifies the owner; PENDING_CHANGE is reachable', async ({ page, request }) => {
+    const notified = await fireChangeEvent(request, 'change.implemented', CHANGE_ID);
+    expect(notified).toBe(1);
+
+    // The notification lands in the list (socket invalidates it live).
+    await page.goto('/notifications');
+    await waitForAuthRestore(page);
+    await expect(page.locator('text=Change request implemented').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(`text=${problemNumber}`).first()).toBeVisible();
+
+    // PENDING_CHANGE requires the linked change — it is now satisfiable.
+    await page.goto(`/problems/${problemId}`);
+    await waitForAuthRestore(page);
+    await page.selectOption('#status-transition', 'PENDING_CHANGE');
+    await expect(page.locator('text=Pending Change').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('fix verification wizard: select change, confirm, resolve', async ({ page }) => {
+    await page.goto(`/problems/${problemId}`);
+    await waitForAuthRestore(page);
+
+    // With a linked change, RESOLVED opens the wizard, not the plain dialog.
+    await page.selectOption('#status-transition', 'RESOLVED');
+    const wizard = page.getByRole('dialog', { name: 'Verify fix and resolve' });
+    await expect(wizard).toBeVisible({ timeout: 10000 });
+
+    // Step 1: the linked change is offered; submit needs a selection.
+    const changeRow = wizard.locator('label', { hasText: CHANGE_ID });
+    await expect(changeRow.locator('input[type="checkbox"]')).not.toBeChecked();
+    await expect(wizard.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await changeRow.locator('input[type="checkbox"]').check();
+    await wizard.getByRole('button', { name: 'Next' }).click();
+
+    // Step 2: confirm + summary gate the final submit.
+    await expect(wizard.getByRole('button', { name: 'Verify fix & resolve' })).toBeDisabled();
+    await wizard.locator('input[type="checkbox"]').check();
+    await wizard.locator('#fix-verification-summary').fill('Deployed the fix, verified the printer queue holds under load.');
+    await wizard.getByRole('button', { name: 'Verify fix & resolve' }).click();
+
+    await expect(page.locator('text=Resolved').first()).toBeVisible({ timeout: 15000 });
+  });
+
+  test('change.rolled_back notifies; problem reopens to INVESTIGATION', async ({ page, request }) => {
+    const notified = await fireChangeEvent(request, 'change.rolled_back', CHANGE_ID);
+    expect(notified).toBe(1);
+
+    await page.goto('/notifications');
+    await waitForAuthRestore(page);
+    await expect(page.locator('text=Change request rolled back').first()).toBeVisible({ timeout: 15000 });
+
+    // The move stays with a human: RESOLVED -> INVESTIGATION from the select.
+    await page.goto(`/problems/${problemId}`);
+    await waitForAuthRestore(page);
+    await page.selectOption('#status-transition', 'INVESTIGATION');
+    await expect(page.locator('text=Investigation').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('unknown change event is accepted but notifies nobody', async ({ request }) => {
+    // Adversarial: the consumer must swallow garbage events, not 500.
+    const res = await request.fetch('http://localhost:5173/api/v1/problems/change-events', {
+      method: 'post',
+      data: { event: 'change.exploded', changeId: CHANGE_ID },
+      headers: AUTH,
+    });
+    expect(res.ok()).toBeTruthy();
+    const body = (await res.json()) as { data: { notified: number } };
+    expect(body.data.notified).toBe(0);
+  });
+
+  test('change-events webhook requires authentication', async ({ browser }) => {
+    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    const page = await context.newPage();
+    const res = await page.request.fetch('http://localhost:5173/api/v1/problems/change-events', {
+      method: 'post',
+      data: { event: 'change.approved', changeId: CHANGE_ID },
+    });
+    expect(res.status()).toBe(401);
+    await context.close();
+  });
+});

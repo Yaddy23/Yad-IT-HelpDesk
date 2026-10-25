@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { requireAuth, requirePermission } from '../../core/auth.js';
 import { toAuthed } from '../../core/request.js';
 import { ProblemsService } from './problems.service.js';
+import { handleChangeEvent } from './changeConsumer.js';
 import {
   problemIdParamSchema,
   listProblemsQuerySchema,
@@ -15,6 +16,7 @@ import {
   setWorkaroundSchema,
   linkChangeRequestSchema,
   unlinkChangeRequestSchema,
+  changeEventSchema,
   getAuditLogSchema,
 } from './validators.js';
 
@@ -206,6 +208,23 @@ problemsRouter.delete('/:id/changes/:changeId', requirePermission('problems:upda
     const { params } = unlinkChangeRequestSchema.parse({ params: req.params, body: req.body ?? {} });
     const problem = await service.unlinkChangeRequest(actor, params.id, params.changeId);
     res.json({ data: problem });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * POST /api/v1/problems/change-events
+ * Webhook seam for the external change system (spec Section 5.4): the change
+ * owner posts change.approved/implemented/rejected/rolled_back and every
+ * problem linked to that change notifies its owner. Notification only —
+ * handleChangeEvent never transitions a problem; coupling is a spec non-goal.
+ */
+problemsRouter.post('/change-events', requirePermission('problems:update'), async (req, res, next) => {
+  try {
+    const { body } = changeEventSchema.parse({ body: req.body });
+    const notified = await handleChangeEvent(body.event, body);
+    res.json({ data: { event: body.event, changeId: body.changeId, notified } });
   } catch (e) {
     next(e);
   }
