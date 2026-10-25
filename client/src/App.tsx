@@ -18,6 +18,8 @@ import PlaceholderPage from '@/pages/PlaceholderPage';
 import TicketCreatePage from '@/pages/TicketCreatePage';
 import TicketDetailPage from '@/pages/TicketDetailPage';
 import TicketsPage from '@/pages/TicketsPage';
+import ProblemCreatePage from '@/pages/ProblemCreatePage';
+import ProblemsPage from '@/pages/ProblemsPage';
 import UsersPage from '@/pages/UsersPage';
 import CatalogAdminPage from '@/pages/CatalogAdminPage';
 import CatalogPage from '@/pages/CatalogPage';
@@ -63,6 +65,18 @@ export default function App() {
             path="tickets/:id"
             element={<ProtectedRoute permissions={['tickets:read']}>
               <TicketDetailPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="problems"
+            element={<ProtectedRoute permissions={['problems:read']}>
+              <ProblemsPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="problems/new"
+            element={<ProtectedRoute permissions={['problems:create']}>
+              <ProblemCreatePage />
             </ProtectedRoute>}
           />
           <Route path="notifications" element={<NotificationsPage />} />
