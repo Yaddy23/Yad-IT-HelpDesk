@@ -33,7 +33,6 @@ async function waitForAuthRestore(page: import('@playwright/test').Page) {
 }
 
 // Use admin auth for most tests (admin has all permissions)
-test.use({ storageState: 'tests/auth-state.json' });
 
 test.describe('Phase 5 - Problems List', () => {
   test('problems page loads and is reachable from nav', async ({ page }) => {

@@ -1,6 +1,6 @@
 # Problem Management — Design Document
 
-**Date:** 2026-10-24 · **Status:** Draft for review
+**Date:** 2026-10-24 · **Status:** Implemented
 **Project:** ITSM Platform (Phase 5 — Service Management)
 **Stack:** React 18 + Vite + Tailwind v4 + TanStack Query · Express + Prisma + Supabase Postgres · BullMQ (Redis) for background jobs
 

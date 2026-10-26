@@ -80,7 +80,9 @@ export function isManagerRole(user: AuthedUser): boolean {
 
 /**
  * Record-level scoping (spec Section 8): managers/admins see all problems,
- * everyone else only the ones they own.
+ * everyone else only the ones they own. Out-of-scope reads return 404, not
+ * 403 — a technician probing ids must not learn that someone else's problem
+ * exists.
  *
  * The spec also allows access via incidents the technician can reach. That
  * needs a User→Employee resolution on every check, so it is deferred (SDD
@@ -88,7 +90,7 @@ export function isManagerRole(user: AuthedUser): boolean {
  */
 function assertProblemAccess(user: AuthedUser, problem: { ownerId: string }): void {
   if (isManagerRole(user) || problem.ownerId === user.id) return;
-  throw forbidden('Not authorized to access this problem');
+  throw notFound('Problem not found');
 }
 
 /**
@@ -226,27 +228,30 @@ export class ProblemsService {
     const owner = await prisma.user.findUnique({ where: { id: input.ownerId } });
     if (!owner) throw notFound('Owner not found');
 
-    const { problem, number } = await prisma.$transaction(async (tx) => {
-      const number = await generateProblemNumber(tx);
-      const problem = await tx.problem.create({
-        data: {
-          number,
-          title: input.title,
-          description: input.description,
-          ownerId: input.ownerId,
-          priority: input.priority ?? 'MEDIUM',
-          affectedServices: input.affectedServices ?? [],
-          affectedAssets: input.affectedAssets ?? [],
-          affectedCIs: input.affectedCIs ?? [],
-          businessImpact: input.businessImpact ?? '',
-          rcaType: input.rcaType ?? 'NONE',
-          status: 'IDENTIFIED',
-          identifiedAt: new Date(),
-        },
-        include: problemDetailInclude,
-      });
-      return { problem, number };
-    });
+    const { problem, number } = await prisma.$transaction(
+      async (tx) => {
+        const number = await generateProblemNumber(tx);
+        const problem = await tx.problem.create({
+          data: {
+            number,
+            title: input.title,
+            description: input.description,
+            ownerId: input.ownerId,
+            priority: input.priority ?? 'MEDIUM',
+            affectedServices: input.affectedServices ?? [],
+            affectedAssets: input.affectedAssets ?? [],
+            affectedCIs: input.affectedCIs ?? [],
+            businessImpact: input.businessImpact ?? '',
+            rcaType: input.rcaType ?? 'NONE',
+            status: 'IDENTIFIED',
+            identifiedAt: new Date(),
+          },
+          include: problemDetailInclude,
+        });
+        return { problem, number };
+      },
+      { maxWait: 10000, timeout: 20000 }
+    );
 
     await recordAudit({
       actorId: user.id,
@@ -289,11 +294,17 @@ export class ProblemsService {
       affectedCIs?: string[];
       businessImpact?: string;
       rcaType?: RCAType;
+      version?: number;
     }
   ): Promise<ProblemDetail> {
     const problem = await prisma.problem.findUnique({ where: { id } });
     if (!problem) throw notFound('Problem not found');
     assertProblemAccess(user, problem);
+
+    // Optimistic locking: check version if provided
+    if (input.version !== undefined && input.version !== problem.version) {
+      throw conflict('Problem was modified by someone else — reload and retry', 'STALE_VERSION');
+    }
 
     const oldValues = {
       title: problem.title,
@@ -305,6 +316,7 @@ export class ProblemsService {
       affectedCIs: problem.affectedCIs,
       businessImpact: problem.businessImpact,
       rcaType: problem.rcaType,
+      version: problem.version,
     };
 
     if (input.ownerId) {
@@ -318,12 +330,13 @@ export class ProblemsService {
         title: input.title ?? problem.title,
         description: input.description ?? problem.description,
         priority: input.priority ?? problem.priority,
-        ownerId: input.ownerId ?? problem.ownerId,
+        owner: { connect: { id: input.ownerId ?? problem.ownerId } },
         affectedServices: input.affectedServices ?? problem.affectedServices,
         affectedAssets: input.affectedAssets ?? problem.affectedAssets,
         affectedCIs: input.affectedCIs ?? problem.affectedCIs,
         businessImpact: input.businessImpact ?? problem.businessImpact,
         rcaType: input.rcaType ?? problem.rcaType,
+        version: { increment: 1 },
       },
       include: problemDetailInclude,
     });
@@ -436,26 +449,29 @@ export class ProblemsService {
     }
 
     try {
-      const updated = await prisma.$transaction(async (tx) => {
-        const updatedProblem = await tx.problem.update({
-          where: { id },
-          data: updateData,
-          include: problemDetailInclude,
-        });
+      const updated = await prisma.$transaction(
+        async (tx) => {
+          const updatedProblem = await tx.problem.update({
+            where: { id },
+            data: updateData,
+            include: problemDetailInclude,
+          });
 
-        // Create audit log entry
-        await tx.problemAuditLog.create({
-          data: {
-            problemId: id,
-            action: 'STATUS_CHANGED',
-            oldValue: { status: problem.status },
-            newValue: { status, ...extra },
-            actorId: user.id,
-          },
-        });
+          // Create audit log entry
+          await tx.problemAuditLog.create({
+            data: {
+              problemId: id,
+              action: 'STATUS_CHANGED',
+              oldValue: { status: problem.status },
+              newValue: { status, ...extra },
+              actorId: user.id,
+            },
+          });
 
-        return updatedProblem;
-      });
+          return updatedProblem;
+        },
+        { maxWait: 10000, timeout: 20000 }
+      );
 
       await recordAudit({
         actorId: user.id,
@@ -507,42 +523,45 @@ export class ProblemsService {
       throw notFound('One or more incidents not found');
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const incidentId of incidentIds) {
-        await tx.problemIncident.create({
+    await prisma.$transaction(
+      async (tx) => {
+        for (const incidentId of incidentIds) {
+          await tx.problemIncident.create({
+            data: {
+              problemId: id,
+              incidentId,
+              linkedById: user.id,
+              note,
+            },
+          }).catch((err: any) => {
+            if (err.code === 'P2002') {
+              // Already linked, skip
+              return;
+            }
+            throw err;
+          });
+        }
+
+        await tx.problemAuditLog.create({
           data: {
             problemId: id,
-            incidentId,
-            linkedById: user.id,
-            note,
+            action: 'INCIDENT_LINKED',
+            newValue: { incidentIds, note },
+            actorId: user.id,
           },
-        }).catch((err: any) => {
-          if (err.code === 'P2002') {
-            // Already linked, skip
-            return;
-          }
-          throw err;
         });
-      }
 
-      await tx.problemAuditLog.create({
-        data: {
-          problemId: id,
-          action: 'INCIDENT_LINKED',
-          newValue: { incidentIds, note },
-          actorId: user.id,
-        },
-      });
-
-      // Linking is an answer: any live suggestion proposing these incidents
-      // for this problem has been acted on. Leaving it pending would ask the
-      // reviewer twice (the same bookkeeping `createProblemFromIncidents`
-      // does when it accepts a suggestion).
-      await tx.detectionSuggestion.updateMany({
-        where: { status: 'PENDING', problemId: id, incidentIds: { hasSome: incidentIds } },
-        data: { status: 'ACCEPTED', reviewedById: user.id, reviewedAt: new Date() },
-      });
-    });
+        // Linking is an answer: any live suggestion proposing these incidents
+        // for this problem has been acted on. Leaving it pending would ask the
+        // reviewer twice (the same bookkeeping `createProblemFromIncidents`
+        // does when it accepts a suggestion).
+        await tx.detectionSuggestion.updateMany({
+          where: { status: 'PENDING', problemId: id, incidentIds: { hasSome: incidentIds } },
+          data: { status: 'ACCEPTED', reviewedById: user.id, reviewedAt: new Date() },
+        });
+      },
+      { maxWait: 10000, timeout: 20000 }
+    );
 
     await recordAudit({
       actorId: user.id,
@@ -578,24 +597,27 @@ export class ProblemsService {
     if (!problem) throw notFound('Problem not found');
     assertProblemAccess(user, problem);
 
-    await prisma.$transaction(async (tx) => {
-      const deleted = await tx.problemIncident.deleteMany({
-        where: { problemId: id, incidentId },
-      });
+    await prisma.$transaction(
+      async (tx) => {
+        const deleted = await tx.problemIncident.deleteMany({
+          where: { problemId: id, incidentId },
+        });
 
-      if (deleted.count === 0) {
-        throw notFound('Incident link not found');
-      }
+        if (deleted.count === 0) {
+          throw notFound('Incident link not found');
+        }
 
-      await tx.problemAuditLog.create({
-        data: {
-          problemId: id,
-          action: 'INCIDENT_UNLINKED',
-          oldValue: { incidentId },
-          actorId: user.id,
-        },
-      });
-    });
+        await tx.problemAuditLog.create({
+          data: {
+            problemId: id,
+            action: 'INCIDENT_UNLINKED',
+            oldValue: { incidentId },
+            actorId: user.id,
+          },
+        });
+      },
+      { maxWait: 10000, timeout: 20000 }
+    );
 
     await recordAudit({
       actorId: user.id,
@@ -638,41 +660,44 @@ export class ProblemsService {
       rcaType: problem.rcaType,
     };
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const updatedProblem = await tx.problem.update({
-        where: { id },
-        data: {
-          rootCause: input.rootCause ?? problem.rootCause,
-          resolutionSummary: input.resolutionSummary ?? problem.resolutionSummary,
-          rcaNotes: input.rcaNotes ?? problem.rcaNotes,
-          fiveWhys: json(input.fiveWhys ?? problem.fiveWhys),
-          fishbone: json(input.fishbone ?? problem.fishbone),
-          confirmedRootCause: input.confirmedRootCause ?? problem.confirmedRootCause,
-          rcaType: input.rcaType ?? problem.rcaType,
-        },
-        include: problemDetailInclude,
-      });
+    const updated = await prisma.$transaction(
+      async (tx) => {
+        const updatedProblem = await tx.problem.update({
+          where: { id },
+          data: {
+            rootCause: input.rootCause ?? problem.rootCause,
+            resolutionSummary: input.resolutionSummary ?? problem.resolutionSummary,
+            rcaNotes: input.rcaNotes ?? problem.rcaNotes,
+            fiveWhys: json(input.fiveWhys ?? problem.fiveWhys),
+            fishbone: json(input.fishbone ?? problem.fishbone),
+            confirmedRootCause: input.confirmedRootCause ?? problem.confirmedRootCause,
+            rcaType: input.rcaType ?? problem.rcaType,
+          },
+          include: problemDetailInclude,
+        });
 
-      await tx.problemAuditLog.create({
-        data: {
-          problemId: id,
-          action: 'RCA_UPDATED',
-          oldValue: json(oldValues),
-          newValue: json({
-            rootCause: updatedProblem.rootCause,
-            resolutionSummary: updatedProblem.resolutionSummary,
-            rcaNotes: updatedProblem.rcaNotes,
-            fiveWhys: updatedProblem.fiveWhys,
-            fishbone: updatedProblem.fishbone,
-            confirmedRootCause: updatedProblem.confirmedRootCause,
-            rcaType: updatedProblem.rcaType,
-          }),
-          actorId: user.id,
-        },
-      });
+        await tx.problemAuditLog.create({
+          data: {
+            problemId: id,
+            action: 'RCA_UPDATED',
+            oldValue: json(oldValues),
+            newValue: json({
+              rootCause: updatedProblem.rootCause,
+              resolutionSummary: updatedProblem.resolutionSummary,
+              rcaNotes: updatedProblem.rcaNotes,
+              fiveWhys: updatedProblem.fiveWhys,
+              fishbone: updatedProblem.fishbone,
+              confirmedRootCause: updatedProblem.confirmedRootCause,
+              rcaType: updatedProblem.rcaType,
+            }),
+            actorId: user.id,
+          },
+        });
 
-      return updatedProblem;
-    });
+        return updatedProblem;
+      },
+      { maxWait: 10000, timeout: 20000 }
+    );
 
     await recordAudit({
       actorId: user.id,
@@ -708,25 +733,28 @@ export class ProblemsService {
     if (!problem) throw notFound('Problem not found');
     assertProblemAccess(user, problem);
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const updatedProblem = await tx.problem.update({
-        where: { id },
-        data: { workaround },
-        include: problemDetailInclude,
-      });
+    const updated = await prisma.$transaction(
+      async (tx) => {
+        const updatedProblem = await tx.problem.update({
+          where: { id },
+          data: { workaround },
+          include: problemDetailInclude,
+        });
 
-      await tx.problemAuditLog.create({
-        data: {
-          problemId: id,
-          action: 'WORKAROUND_SET',
-          oldValue: { workaround: problem.workaround },
-          newValue: { workaround },
-          actorId: user.id,
-        },
-      });
+        await tx.problemAuditLog.create({
+          data: {
+            problemId: id,
+            action: 'WORKAROUND_SET',
+            oldValue: { workaround: problem.workaround },
+            newValue: { workaround },
+            actorId: user.id,
+          },
+        });
 
-      return updatedProblem;
-    });
+        return updatedProblem;
+      },
+      { maxWait: 10000, timeout: 20000 }
+    );
 
     await recordAudit({
       actorId: user.id,
@@ -759,24 +787,27 @@ export class ProblemsService {
       return problem; // Already linked
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const updatedProblem = await tx.problem.update({
-        where: { id },
-        data: { changeRequestIds: { push: changeId } },
-        include: problemDetailInclude,
-      });
+    const updated = await prisma.$transaction(
+      async (tx) => {
+        const updatedProblem = await tx.problem.update({
+          where: { id },
+          data: { changeRequestIds: { push: changeId } },
+          include: problemDetailInclude,
+        });
 
-      await tx.problemAuditLog.create({
-        data: {
-          problemId: id,
-          action: 'CHANGE_LINKED',
-          newValue: { changeId },
-          actorId: user.id,
-        },
-      });
+        await tx.problemAuditLog.create({
+          data: {
+            problemId: id,
+            action: 'CHANGE_LINKED',
+            newValue: { changeId },
+            actorId: user.id,
+          },
+        });
 
-      return updatedProblem;
-    });
+        return updatedProblem;
+      },
+      { maxWait: 10000, timeout: 20000 }
+    );
 
     await recordAudit({
       actorId: user.id,
@@ -807,24 +838,27 @@ export class ProblemsService {
       return problem; // Not linked
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const updatedProblem = await tx.problem.update({
-        where: { id },
-        data: { changeRequestIds: problem.changeRequestIds.filter((c) => c !== changeId) },
-        include: problemDetailInclude,
-      });
+    const updated = await prisma.$transaction(
+      async (tx) => {
+        const updatedProblem = await tx.problem.update({
+          where: { id },
+          data: { changeRequestIds: problem.changeRequestIds.filter((c) => c !== changeId) },
+          include: problemDetailInclude,
+        });
 
-      await tx.problemAuditLog.create({
-        data: {
-          problemId: id,
-          action: 'CHANGE_UNLINKED',
-          oldValue: { changeId },
-          actorId: user.id,
-        },
-      });
+        await tx.problemAuditLog.create({
+          data: {
+            problemId: id,
+            action: 'CHANGE_UNLINKED',
+            oldValue: { changeId },
+            actorId: user.id,
+          },
+        });
 
-      return updatedProblem;
-    });
+        return updatedProblem;
+      },
+      { maxWait: 10000, timeout: 20000 }
+    );
 
     await recordAudit({
       actorId: user.id,

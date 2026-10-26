@@ -1253,6 +1253,9 @@ model Problem {
   detectionSource    String? // "AUTO" | "MANUAL" | "AUTOMATION_RULE"
   autoDetectionScore Float?
 
+  // Optimistic concurrency
+  version    Int       @default(1)
+
   // Timestamps
   identifiedAt           DateTime  @default(now())
   investigationStartedAt DateTime?

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 
 import { requireAuth, requirePermission } from '../../core/auth.js';
 import { toAuthed } from '../../core/request.js';
@@ -50,17 +50,25 @@ problemsRouter.get('/', async (req, res, next) => {
 /**
  * POST /api/v1/problems
  * Create a new problem.
+ * Registered for both '' and '/' to handle requests with/without trailing slash.
  */
-problemsRouter.post('/', requirePermission('problems:create'), async (req, res, next) => {
+const createProblemHandler = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const actor = toAuthed(req).user!;
     const { body } = createProblemSchema.parse({ body: req.body });
-    const problem = await service.create(actor, body);
+    // Default ownerId to current user if not provided
+    const input = {
+      ...body,
+      ownerId: body.ownerId ?? actor.id,
+    };
+    const problem = await service.create(actor, input);
     res.status(201).json({ data: problem });
   } catch (e) {
     next(e);
   }
-});
+};
+problemsRouter.post('', requirePermission('problems:create'), createProblemHandler);
+problemsRouter.post('/', requirePermission('problems:create'), createProblemHandler);
 
 /**
  * GET /api/v1/problems/dashboard

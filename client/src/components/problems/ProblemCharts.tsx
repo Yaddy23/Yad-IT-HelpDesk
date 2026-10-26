@@ -14,7 +14,8 @@ import {
   Legend,
 } from 'recharts';
 
-import type { ProblemDashboard } from '@/lib/problemApi';
+import type { ProblemDashboard, KnownErrorStatus } from '@/lib/problemApi';
+import { KNOWN_ERROR_STATUS_LABELS } from '@/lib/problemApi';
 
 /**
  * Semantic color tokens used by the dashboard charts.
@@ -41,11 +42,12 @@ function ChartCard({
   title,
   children,
   className = '',
-}: { title: string; children: React.ReactNode; className?: string }) {
+  heightClass = 'h-64',
+}: { title: string; children: React.ReactNode; className?: string; heightClass?: string }) {
   return (
     <div className={`rounded-xl border border-border bg-card p-5 ${className}`}>
       <h3 className="mb-4 text-sm font-medium text-foreground">{title}</h3>
-      <div className="h-64">{children}</div>
+      <div className={heightClass}>{children}</div>
     </div>
   );
 }
@@ -240,12 +242,13 @@ export function ProblemParetoChart({ data }: { data: ProblemDashboard['topCauses
 export function ProblemAgingChart({ data }: { data: ProblemDashboard['aging'] }) {
   if (!data?.length) return <ChartCard title="Problem Aging">No data</ChartCard>;
 
-  // Sequential color ramp: light -> dark for older buckets
+  // Sequential color ramp using CSS color-mix for opacity (Tailwind's /opacity syntax
+  // only works in utility classes, not raw CSS variable references)
   const AGING_COLORS = [
     'var(--color-primary)',
-    'var(--color-primary/80)',
-    'var(--color-primary/60)',
-    'var(--color-primary/40)',
+    'color-mix(in srgb, var(--color-primary) 80%, transparent)',
+    'color-mix(in srgb, var(--color-primary) 60%, transparent)',
+    'color-mix(in srgb, var(--color-primary) 40%, transparent)',
   ];
 
   return (
@@ -279,7 +282,7 @@ export function ProblemAgingChart({ data }: { data: ProblemDashboard['aging'] })
 
 /**
  * Status distribution pie chart.
- * Uses status semantic colors where possible, falls back to categorical palette.
+ * Uses status semantic colors matching the status badge palette for consistency.
  */
 export function ProblemStatusChart({ data }: { data: ProblemDashboard['statusDistribution'] }) {
   if (!data?.length) return <ChartCard title="Status Distribution">No data</ChartCard>;
@@ -294,10 +297,8 @@ export function ProblemStatusChart({ data }: { data: ProblemDashboard['statusDis
     CLOSED: 'var(--color-slate-500)',
   };
 
-  const total = data.reduce((sum, d) => sum + d.count, 0);
-
   return (
-    <ChartCard title="Problems by Status">
+    <ChartCard title="Problems by Status" heightClass="h-80">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -309,12 +310,7 @@ export function ProblemStatusChart({ data }: { data: ProblemDashboard['statusDis
             paddingAngle={2}
             dataKey="count"
             nameKey="status"
-            label={({ percent, payload }) =>
-              percent && percent > 0.05 && (
-                <span className="text-xs font-medium" style={{ fill: CHART_COLORS.foreground }}>
-                  {payload?.status?.replace('_', ' ')} {Math.round((percent ?? 0) * 100)}%
-                </span>
-              )}
+            label={false}
             labelLine={false}
           >
             {data.map((entry, i) => (
@@ -329,22 +325,9 @@ export function ProblemStatusChart({ data }: { data: ProblemDashboard['statusDis
             wrapperStyle={{ paddingTop: 8 }}
             iconType="circle"
             iconSize={8}
-            formatter={(value) => value.replace('_', ' ')}
+            formatter={(value) => value.replaceAll('_', ' ')}
           />
         </PieChart>
-        <div className="mt-3 flex flex-wrap justify-center gap-3 text-xs">
-          {data.map((entry) => (
-            <span key={entry.status} className="flex items-center gap-1">
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: STATUS_COLORS[entry.status] || CHART_COLORS.muted }}
-              />
-              <span className="text-muted-foreground">
-                {entry.status.replace('_', ' ')} ({Math.round((entry.count / total) * 100)}%)
-              </span>
-            </span>
-          ))}
-        </div>
       </ResponsiveContainer>
     </ChartCard>
   );
@@ -367,10 +350,8 @@ export function KnownErrorStatusChart({
     RETIRED: 'var(--color-red-500)',
   };
 
-  const total = data.reduce((sum, d) => sum + d.count, 0);
-
   return (
-    <ChartCard title="Known Errors by Status">
+    <ChartCard title="Known Errors by Status" heightClass="h-80">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -382,12 +363,7 @@ export function KnownErrorStatusChart({
             paddingAngle={2}
             dataKey="count"
             nameKey="status"
-            label={({ percent, payload }) =>
-              percent && percent > 0.05 && (
-                <span className="text-xs font-medium" style={{ fill: CHART_COLORS.foreground }}>
-                  {payload?.status} {Math.round((percent ?? 0) * 100)}%
-                </span>
-              )}
+            label={false}
             labelLine={false}
           >
             {data.map((entry, i) => (
@@ -402,22 +378,9 @@ export function KnownErrorStatusChart({
             wrapperStyle={{ paddingTop: 8 }}
             iconType="circle"
             iconSize={8}
-            formatter={(value) => value}
+            formatter={(value) => KNOWN_ERROR_STATUS_LABELS[value as KnownErrorStatus] ?? value}
           />
         </PieChart>
-        <div className="mt-3 flex flex-wrap justify-center gap-3 text-xs">
-          {data.map((entry) => (
-            <span key={entry.status} className="flex items-center gap-1">
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: KE_STATUS_COLORS[entry.status] || CHART_COLORS.muted }}
-              />
-              <span className="text-muted-foreground">
-                {entry.status} ({Math.round((entry.count / total) * 100)}%)
-              </span>
-            </span>
-          ))}
-        </div>
       </ResponsiveContainer>
     </ChartCard>
   );

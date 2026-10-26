@@ -12,14 +12,14 @@ export const problemIdParamSchema = z.object({
 
 export const createProblemSchema = z.object({
   body: z.object({
-    title: z.string().min(1).max(200),
+    title: z.string().min(3).max(200),
     description: z.string().min(1).max(10000),
-    ownerId: z.string().min(1),
+    ownerId: z.string().min(1).optional(),
     priority: problemPriorityEnum.default('MEDIUM'),
     affectedServices: z.array(z.string()).default([]),
     affectedAssets: z.array(z.string()).default([]),
     affectedCIs: z.array(z.string()).default([]),
-    businessImpact: z.string().optional(),
+    businessImpact: z.string().max(10000).optional(),
     rcaType: rcaTypeEnum.optional(),
   }),
 });
@@ -34,8 +34,10 @@ export const updateProblemSchema = z.object({
     affectedServices: z.array(z.string()).optional(),
     affectedAssets: z.array(z.string()).optional(),
     affectedCIs: z.array(z.string()).optional(),
-    businessImpact: z.string().optional(),
+    businessImpact: z.string().max(10000).optional(),
     rcaType: rcaTypeEnum.optional(),
+    // Optimistic locking
+    version: z.number().int().positive().optional(),
   }),
 });
 
@@ -64,8 +66,16 @@ export const listProblemsQuerySchema = z.object({
       ),
     ownerId: z.string().min(1).optional(),
     affectedService: z.string().max(80).optional(),
-    identifiedAfter: z.string().datetime().optional(),
-    identifiedBefore: z.string().datetime().optional(),
+    // Date-only ("2026-01-01") or full ISO — the dashboard KPI range picker
+    // sends the former; Date.parse handles both.
+    identifiedAfter: z
+      .string()
+      .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date')
+      .optional(),
+    identifiedBefore: z
+      .string()
+      .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date')
+      .optional(),
   }),
 });
 

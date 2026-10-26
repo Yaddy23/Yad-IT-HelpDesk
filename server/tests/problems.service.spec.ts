@@ -175,6 +175,7 @@ test('getAuditLog returns audit entries for status transitions', async () => {
   const problem = await service.create(user, { title: 'T', description: 'D', ownerId: fixture.ownerId });
   await service.transitionStatus(user, problem.id, 'INVESTIGATION');
   const audit = await service.getAuditLog(user, problem.id, { page: 1, limit: 10 });
-  expect(audit.length).toBeGreaterThanOrEqual(1);
-  expect(audit[0].action).toBe('STATUS_CHANGED');
+  expect(audit.data.length).toBeGreaterThanOrEqual(1);
+  expect(audit.data[0].action).toBe('STATUS_CHANGED');
+  expect(audit.meta.total).toBe(audit.data.length);
 });
