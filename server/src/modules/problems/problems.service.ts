@@ -88,7 +88,7 @@ export function isManagerRole(user: AuthedUser): boolean {
  * needs a User→Employee resolution on every check, so it is deferred (SDD
  * ledger) rather than paid for on each read.
  */
-function assertProblemAccess(user: AuthedUser, problem: { ownerId: string }): void {
+export function assertProblemAccess(user: AuthedUser, problem: { ownerId: string }): void {
   if (isManagerRole(user) || problem.ownerId === user.id) return;
   throw notFound('Problem not found');
 }
@@ -324,13 +324,17 @@ export class ProblemsService {
       if (!owner) throw notFound('New owner not found');
     }
 
-    const updated = await prisma.problem.update({
-      where: { id },
+    // Optimistic locking: claim the row atomically. The version predicate lives
+    // in the WHERE clause (not a check-then-act), so two concurrent PATCHes
+    // carrying the same version cannot both succeed — the loser's updateMany
+    // matches 0 rows and gets a 409.
+    const claim = await prisma.problem.updateMany({
+      where: input.version !== undefined ? { id, version: input.version } : { id },
       data: {
         title: input.title ?? problem.title,
         description: input.description ?? problem.description,
         priority: input.priority ?? problem.priority,
-        owner: { connect: { id: input.ownerId ?? problem.ownerId } },
+        ownerId: input.ownerId ?? problem.ownerId,
         affectedServices: input.affectedServices ?? problem.affectedServices,
         affectedAssets: input.affectedAssets ?? problem.affectedAssets,
         affectedCIs: input.affectedCIs ?? problem.affectedCIs,
@@ -338,6 +342,13 @@ export class ProblemsService {
         rcaType: input.rcaType ?? problem.rcaType,
         version: { increment: 1 },
       },
+    });
+    if (claim.count === 0) {
+      throw conflict('Problem was modified by someone else — reload and retry', 'STALE_VERSION');
+    }
+
+    const updated = await prisma.problem.findUniqueOrThrow({
+      where: { id },
       include: problemDetailInclude,
     });
 
@@ -401,7 +412,7 @@ export class ProblemsService {
 
     // Validation rules per spec Section 7
     const now = new Date();
-    const updateData: Prisma.ProblemUpdateInput = { status };
+    const updateData: Prisma.ProblemUpdateInput = { status, version: { increment: 1 } };
 
     switch (status) {
       case 'INVESTIGATION':
@@ -451,9 +462,18 @@ export class ProblemsService {
     try {
       const updated = await prisma.$transaction(
         async (tx) => {
-          const updatedProblem = await tx.problem.update({
-            where: { id },
+          // Claim the row by the version we read. A concurrent transition (or
+          // PATCH) bumps version, so this matches 0 rows and we 409 instead of
+          // letting two conflicting transitions both apply.
+          const claim = await tx.problem.updateMany({
+            where: { id, version: problem.version },
             data: updateData,
+          });
+          if (claim.count === 0) {
+            throw conflict('Problem was modified by someone else — reload and retry', 'STALE_VERSION');
+          }
+          const updatedProblem = await tx.problem.findUniqueOrThrow({
+            where: { id },
             include: problemDetailInclude,
           });
 
@@ -662,8 +682,8 @@ export class ProblemsService {
 
     const updated = await prisma.$transaction(
       async (tx) => {
-        const updatedProblem = await tx.problem.update({
-          where: { id },
+        const claim = await tx.problem.updateMany({
+          where: { id, version: problem.version },
           data: {
             rootCause: input.rootCause ?? problem.rootCause,
             resolutionSummary: input.resolutionSummary ?? problem.resolutionSummary,
@@ -672,7 +692,14 @@ export class ProblemsService {
             fishbone: json(input.fishbone ?? problem.fishbone),
             confirmedRootCause: input.confirmedRootCause ?? problem.confirmedRootCause,
             rcaType: input.rcaType ?? problem.rcaType,
+            version: { increment: 1 },
           },
+        });
+        if (claim.count === 0) {
+          throw conflict('Problem was modified by someone else — reload and retry', 'STALE_VERSION');
+        }
+        const updatedProblem = await tx.problem.findUniqueOrThrow({
+          where: { id },
           include: problemDetailInclude,
         });
 
@@ -735,9 +762,15 @@ export class ProblemsService {
 
     const updated = await prisma.$transaction(
       async (tx) => {
-        const updatedProblem = await tx.problem.update({
+        const claim = await tx.problem.updateMany({
+          where: { id, version: problem.version },
+          data: { workaround, version: { increment: 1 } },
+        });
+        if (claim.count === 0) {
+          throw conflict('Problem was modified by someone else — reload and retry', 'STALE_VERSION');
+        }
+        const updatedProblem = await tx.problem.findUniqueOrThrow({
           where: { id },
-          data: { workaround },
           include: problemDetailInclude,
         });
 

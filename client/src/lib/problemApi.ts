@@ -61,6 +61,8 @@ export interface ProblemSummary {
   identifiedAt: string;
   createdAt: string;
   updatedAt: string;
+  /** Optimistic-lock token — send back with writes; a 409 means someone edited first. */
+  version: number;
 }
 
 /**
@@ -263,6 +265,8 @@ export interface UpdateProblemInput {
   affectedCIs?: string[];
   businessImpact?: string;
   rcaType?: RCAType;
+  /** Optimistic-lock token from the loaded problem — omit to skip the check. */
+  version?: number;
 }
 
 export interface TransitionStatusInput {

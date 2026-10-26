@@ -132,7 +132,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'known_errors:read',
   ],
   employee: EMPLOYEE_BASE,
-  approver: ['approvals:decide', 'kb:read'],
+  approver: ['approvals:decide', 'kb:read', 'problems:read'],
 };
 
 export function hasPermission(user: { roles: Role[] }, permission: Permission): boolean {

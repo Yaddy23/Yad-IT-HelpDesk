@@ -85,8 +85,8 @@ export const transitionStatusSchema = z.object({
     status: z.enum(PROBLEM_STATUSES),
     // Extra fields for specific transitions
     verifiedFix: z.boolean().optional(),
-    resolutionSummary: z.string().optional(),
-    exceptionReason: z.string().optional(),
+    resolutionSummary: z.string().max(10000).optional(),
+    exceptionReason: z.string().max(10000).optional(),
   }),
 });
 
@@ -126,7 +126,9 @@ export const setWorkaroundSchema = z.object({
 export const linkChangeRequestSchema = z.object({
   params: z.object({ id: z.string().min(1) }),
   body: z.object({
-    changeId: z.string().min(1),
+    // Opaque external id (same bound as the change-event webhook) — it lands
+    // in array-contains queries and notification copy.
+    changeId: z.string().min(1).max(120),
   }),
 });
 

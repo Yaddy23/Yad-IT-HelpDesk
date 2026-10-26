@@ -90,6 +90,7 @@ export default function ChangeLinkModal({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="e.g. CHG-2026-0042"
+                maxLength={120}
                 className={inputBase}
               />
               <button

@@ -1,2 +1,4 @@
 -- Add version column to Problem table for optimistic locking
-ALTER TABLE "test"."Problem" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1;
+-- Schema-unqualified (like every other migration) so it applies to whatever
+-- schema the connection's search_path points at.
+ALTER TABLE "Problem" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1;

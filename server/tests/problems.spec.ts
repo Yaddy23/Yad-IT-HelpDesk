@@ -1102,6 +1102,40 @@ describe('Adversarial tests (Section 13 AC13)', () => {
     expect(res2.status).toBe(409);
   });
 
+  it('concurrent PATCHes with the same version: exactly one wins, the other gets 409', async () => {
+    // The version predicate lives in the UPDATE's WHERE clause (not a
+    // check-then-act), so two requests firing simultaneously against the same
+    // version cannot both succeed — the loser's claim matches 0 rows.
+    const createRes = await request(app)
+      .post('/api/v1/problems')
+      .set('Authorization', `Bearer ${techToken}`)
+      .send(getValidProblem());
+    const problemId = createRes.body.data.id;
+    const version = createRes.body.data.version;
+
+    const [a, b] = await Promise.allSettled([
+      request(app)
+        .patch(`/api/v1/problems/${problemId}`)
+        .set('Authorization', `Bearer ${techToken}`)
+        .send({ title: 'Writer A', version }),
+      request(app)
+        .patch(`/api/v1/problems/${problemId}`)
+        .set('Authorization', `Bearer ${techToken}`)
+        .send({ title: 'Writer B', version }),
+    ]);
+
+    const statuses = [a, b].map((r) => (r.status === 'fulfilled' ? r.value.status : 0));
+    statuses.sort((x, y) => x - y);
+    expect(statuses).toEqual([200, 409]);
+
+    const final = await request(app)
+      .get(`/api/v1/problems/${problemId}`)
+      .set('Authorization', `Bearer ${techToken}`);
+    expect(final.body.data.version).toBe(version + 1);
+    // Exactly one of the two titles landed; the loser did not partially apply.
+    expect(['Writer A', 'Writer B']).toContain(final.body.data.title);
+  });
+
   it('enforces RBAC - employee cannot access problems endpoints', async () => {
     const res = await request(app)
       .get('/api/v1/problems')

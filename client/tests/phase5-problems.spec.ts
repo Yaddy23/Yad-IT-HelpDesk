@@ -471,8 +471,17 @@ test.describe('Phase 5 - Change Integration & Fix Verification', () => {
     // PENDING_CHANGE requires the linked change — it is now satisfiable.
     await page.goto(`/problems/${problemId}`);
     await waitForAuthRestore(page);
-    await page.selectOption('#status-transition', 'PENDING_CHANGE');
-    await expect(page.locator('text=Pending Change').first()).toBeVisible({ timeout: 10000 });
+    // The socket invalidation from the notification above can re-render the
+    // page while selectOption dispatches, dropping the change event (the
+    // select resets silently and no request fires). Retry the selection until
+    // the header badge reflects the transition; scope to spans so the hidden
+    // <option> can never satisfy the assertion.
+    await expect(async () => {
+      await page.selectOption('#status-transition', 'PENDING_CHANGE');
+      await expect(
+        page.locator('main span', { hasText: 'Pending Change' }).first(),
+      ).toBeVisible();
+    }).toPass({ timeout: 20000 });
   });
 
   test('fix verification wizard: select change, confirm, resolve', async ({ page }) => {

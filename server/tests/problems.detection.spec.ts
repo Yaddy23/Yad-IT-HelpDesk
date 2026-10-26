@@ -186,11 +186,11 @@ test('scanWindow honours an explicit threshold', async () => {
   // The incident is always reported — an incident with no match is the cluster
   // candidate `runDetection` turns into a "start a problem" suggestion — so the
   // threshold filters the MATCHES, not the incident list.
-  const strict = await scanWindow(WINDOW_START(), 90);
+  const strict = await scanWindow(WINDOW_START(), { threshold: 90 });
   expect(strict).toHaveLength(1);
   expect(strict[0].matches).toHaveLength(0);
 
-  const loose = await scanWindow(WINDOW_START(), 50);
+  const loose = await scanWindow(WINDOW_START(), { threshold: 50 });
   expect(loose).toHaveLength(1);
   expect(loose[0].matches).toHaveLength(1);
 });

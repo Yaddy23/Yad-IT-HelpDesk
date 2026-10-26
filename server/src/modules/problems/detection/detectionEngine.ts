@@ -79,10 +79,17 @@ export interface IncidentMatches {
  * Already-linked incidents and incidents sitting in a live suggestion are
  * dropped — otherwise the review queue refills with the same rows every
  * interval and a reviewer learns to ignore it.
+ *
+ * `ownerId`/`incidentWhere` carry the caller's record scope (non-managers see
+ * only their own problems, and only tickets `ticketScopeWhere` lets them view)
+ * so the on-demand scan cannot rank rows its caller was never shown.
  */
-async function loadScanContext(windowStart: Date): Promise<{ problems: ProblemRow[]; incidents: IncidentRow[] }> {
+async function loadScanContext(
+  windowStart: Date,
+  scope?: { ownerId?: string; incidentWhere?: Prisma.TicketWhereInput },
+): Promise<{ problems: ProblemRow[]; incidents: IncidentRow[] }> {
   const problems = await prisma.problem.findMany({
-    where: { deletedAt: null, status: { not: 'CLOSED' } },
+    where: { deletedAt: null, status: { not: 'CLOSED' }, ...(scope?.ownerId ? { ownerId: scope.ownerId } : {}) },
     select: problemSelect,
   });
   if (problems.length === 0) return { problems, incidents: [] };
@@ -98,7 +105,11 @@ async function loadScanContext(windowStart: Date): Promise<{ problems: ProblemRo
   for (const suggestion of pending) for (const id of suggestion.incidentIds) claimed.add(id);
 
   const candidates = await prisma.ticket.findMany({
-    where: { createdAt: { gte: windowStart }, status: { in: [...OPEN_TICKET_STATUSES] } },
+    where: {
+      createdAt: { gte: windowStart },
+      status: { in: [...OPEN_TICKET_STATUSES] },
+      ...(scope?.incidentWhere ? { AND: [scope.incidentWhere] } : {}),
+    },
     select: incidentSelect,
     orderBy: { createdAt: 'desc' },
     take: MAX_SCAN_INCIDENTS,
@@ -133,11 +144,15 @@ function rankIncidents(
 /**
  * Read-only scan: what the detection window looks like right now. Persists
  * nothing, so it is safe behind a GET and safe to call as often as a user
- * clicks.
+ * clicks. `scope` narrows the result to what the calling user may see
+ * (see `loadScanContext`); the scheduled worker calls it unscoped.
  */
-export async function scanWindow(windowStart: Date, threshold?: number): Promise<IncidentMatches[]> {
-  const limit = threshold ?? (await problemConfig.detectionThreshold());
-  const { problems, incidents } = await loadScanContext(windowStart);
+export async function scanWindow(
+  windowStart: Date,
+  scope?: { threshold?: number; ownerId?: string; incidentWhere?: Prisma.TicketWhereInput },
+): Promise<IncidentMatches[]> {
+  const limit = scope?.threshold ?? (await problemConfig.detectionThreshold());
+  const { problems, incidents } = await loadScanContext(windowStart, scope);
   if (problems.length === 0 || incidents.length === 0) return [];
   return [...rankIncidents(problems, incidents, limit).values()];
 }
@@ -307,11 +322,13 @@ export async function createProblemFromIncidents(incidentIds: string[], actorId:
 
 /**
  * Problems that already look like this one — the duplicate check a person runs
- * before filing. Returns the scored problems, best first.
+ * before filing. Returns the scored problems, best first. `ownerId` scopes the
+ * results (non-managers see only problems they own), and the caller is
+ * responsible for access-checking the source problem first.
  */
 export async function findSimilarToProblem(
   problemId: string,
-  threshold?: number,
+  scope?: { threshold?: number; ownerId?: string },
 ): Promise<Array<{ problem: ProblemRow; score: number; reasons: string[] }>> {
   const source = await prisma.problem.findFirst({ where: { id: problemId, deletedAt: null }, select: problemSelect });
   // An empty list would be indistinguishable from "this problem does not
@@ -319,7 +336,12 @@ export async function findSimilarToProblem(
   if (!source) throw notFound('Problem not found');
 
   const others = await prisma.problem.findMany({
-    where: { id: { not: problemId }, deletedAt: null, status: { not: 'CLOSED' } },
+    where: {
+      id: { not: problemId },
+      deletedAt: null,
+      status: { not: 'CLOSED' },
+      ...(scope?.ownerId ? { ownerId: scope.ownerId } : {}),
+    },
     select: problemSelect,
   });
   if (others.length === 0) return [];
@@ -332,5 +354,5 @@ export async function findSimilarToProblem(
     description: source.description,
   });
 
-  return findSimilarProblems(asIncident, others, threshold);
+  return findSimilarProblems(asIncident, others, scope?.threshold);
 }

@@ -20,7 +20,7 @@ import { conflict, notFound } from '../../../core/errors.js';
 import { toAuthed } from '../../../core/request.js';
 import { prisma } from '../../../prisma/client.js';
 import { problemConfig } from '../config.js';
-import { isManagerRole } from '../problems.service.js';
+import { assertProblemAccess, isManagerRole } from '../problems.service.js';
 import { ticketScopeWhere } from '../../tickets/tickets.service.js';
 import { DETECTION_CRITERIA } from './criteria.js';
 import { createProblemFromIncidents, findSimilarToProblem, scanWindow } from './detectionEngine.js';
@@ -62,9 +62,17 @@ function windowStartFrom(hours: number): Date {
  */
 detectionRouter.get('/detect', requireAuth, requirePermission('problems:read'), async (req, res, next) => {
   try {
+    const actor = toAuthed(req).user!;
     const query = detectQuerySchema.parse(req.query);
     const windowHours = query.windowHours ?? DETECTION_CRITERIA.windowHours;
     const threshold = query.threshold ?? (await problemConfig.detectionThreshold());
+
+    // Record scope follows the rest of the module: managers rank against every
+    // open problem; technicians only their own, and only tickets they could
+    // view (`ticketScopeWhere` — the same predicate ticket lists use).
+    const manager = isManagerRole(actor);
+    const ownerScope = manager ? undefined : actor.id;
+    const incidentWhere = manager ? undefined : await ticketScopeWhere(actor);
 
     if (query.incidentId) {
       const incident = await prisma.ticket.findUnique({
@@ -74,7 +82,7 @@ detectionRouter.get('/detect', requireAuth, requirePermission('problems:read'), 
       if (!incident) throw notFound('Incident not found');
 
       const problems = await prisma.problem.findMany({
-        where: { deletedAt: null, status: { not: 'CLOSED' } },
+        where: { deletedAt: null, status: { not: 'CLOSED' }, ...(ownerScope ? { ownerId: ownerScope } : {}) },
         select: { id: true, number: true, title: true, description: true, affectedServices: true, affectedAssets: true, rootCause: true, workaround: true },
       });
 
@@ -91,7 +99,7 @@ detectionRouter.get('/detect', requireAuth, requirePermission('problems:read'), 
       return;
     }
 
-    const results = await scanWindow(windowStartFrom(windowHours), threshold);
+    const results = await scanWindow(windowStartFrom(windowHours), { threshold, ownerId: ownerScope, incidentWhere });
     res.json({
       data: results,
       meta: { scanned: results.length, threshold, windowHours },
@@ -232,7 +240,23 @@ detectionRouter.get('/:id/similar', requireAuth, requirePermission('problems:rea
   try {
     const { params } = similarParamSchema.parse({ params: req.params });
     const query = similarQuerySchema.parse(req.query);
-    const similar = await findSimilarToProblem(params.id, query.threshold);
+    const actor = toAuthed(req).user!;
+    const manager = isManagerRole(actor);
+
+    // Access-check the source problem itself, then scope the results the same
+    // way — a technician probing ids must not read other owners' root-cause
+    // rows through this endpoint.
+    const source = await prisma.problem.findFirst({
+      where: { id: params.id, deletedAt: null },
+      select: { ownerId: true },
+    });
+    if (!source) throw notFound('Problem not found');
+    assertProblemAccess(actor, source);
+
+    const similar = await findSimilarToProblem(params.id, {
+      threshold: query.threshold,
+      ownerId: manager ? undefined : actor.id,
+    });
     res.json({ data: similar, meta: { count: similar.length } });
   } catch (e) {
     next(e);
