@@ -3,12 +3,15 @@ import type { ComponentType, SVGProps } from 'react';
 import {
   ApprovalsIcon,
   AuditIcon,
+  BookMarkedIcon,
   BookOpenIcon,
+  BugIcon,
   BuildingIcon,
   DashboardIcon,
   MonitorIcon,
   SettingsIcon,
   TicketIcon,
+  TrendingUpIcon,
   UsersIcon,
 } from '@/components/icons';
 
@@ -26,6 +29,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Tickets', to: '/tickets', icon: TicketIcon, permissions: ['tickets:read'], section: 'work' },
   { label: 'Assets', to: '/assets', icon: MonitorIcon, permissions: ['assets:read'], section: 'work' },
   { label: 'Knowledge', to: '/knowledge', icon: BookOpenIcon, permissions: ['kb:read'], section: 'work' },
+  { label: 'Problems', to: '/problems', icon: BugIcon, permissions: ['problems:read'], section: 'work' },
+  { label: 'Problems Dashboard', to: '/problems/dashboard', icon: TrendingUpIcon, permissions: ['problems:read'], section: 'work' },
+  { label: 'Known Errors', to: '/known-errors', icon: BookMarkedIcon, permissions: ['known_errors:read'], section: 'work' },
   { label: 'Approvals', to: '/approvals', icon: ApprovalsIcon, permissions: ['approvals:decide'], section: 'work' },
   { label: 'Users', to: '/admin/users', icon: UsersIcon, permissions: ['users:manage'], section: 'admin' },
   { label: 'Organization', to: '/admin/org', icon: BuildingIcon, permissions: ['org:manage'], section: 'admin' },

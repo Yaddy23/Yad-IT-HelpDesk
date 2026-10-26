@@ -233,3 +233,84 @@ export const ExternalLinkIcon = (p: IconProps) => (
     <line x1="10" x2="21" y1="14" y2="3" />
   </svg>
 );
+
+export const BugIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 2a2 2 0 0 1 2 2v1M12 21v-1M12 2a2 2 0 0 0-2 2h1M12 2a2 2 0 0 1 2-2h1" />
+    <path d="M5 9c0-2.5 2-4 4-4s4 1.5 4 4" />
+    <path d="M15 9c0 2.5-2 4-4 4s-4-1.5-4-4" />
+    <path d="M9 15h6" />
+    <path d="M9 19h6" />
+  </svg>
+);
+
+export const LinkIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </svg>
+);
+
+export const UnlinkIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M18 13a5 5 0 0 1-7.54.54M14 11a5 5 0 0 0-7.54-.54M14 11l3 3m-3-3 3-3" />
+    <path d="M6 11a5 5 0 0 0 7.54.54M10 13a5 5 0 0 1 7.54-.54M10 13l-3-3m3 3-3 3" />
+  </svg>
+);
+
+export const BrainIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3a6 6 0 0 0-6 6c0 3 2 5 6 7 4-2 6-4 6-7a6 6 0 1 0-6-6z" />
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);
+
+export const WrenchIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+  </svg>
+);
+
+export const GitBranchIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 3v12" />
+    <path d="M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+    <path d="M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+    <path d="M15 6a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+  </svg>
+);
+
+export const HistoryIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 6v6l4 2" />
+  </svg>
+);
+
+export const AlertTriangleIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <path d="M12 9v4M12 17h.01" />
+  </svg>
+);
+
+export const TrendingUpIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M22 18H12a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2z" />
+    <path d="m22 13-5-5-4 4-3-3-2 2" />
+  </svg>
+);
+
+export const AlertCircleIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 8v4M12 16h.01" />
+  </svg>
+);
+
+export const CheckCircleIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+);

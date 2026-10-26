@@ -64,6 +64,12 @@ model User {
   knowledgeOwned         KnowledgeArticle[]       @relation("knowledgeOwner")
   knowledgeRevisions     KnowledgeRevision[]      @relation("knowledgeEditor")
   knowledgeFeedback      KnowledgeFeedback[]      @relation("knowledgeFeedback")
+  // Problem Management
+  ownedProblems          Problem[]                @relation("problemOwner")
+  linkedProblemIncidents ProblemIncident[]        @relation("problemIncidentLinker")
+  knownErrorsOwned       KnownError[]             @relation("knownErrorOwner")
+  knownErrorsApproved    KnownError[]             @relation("knownErrorApprover")
+  problemAuditLogs       ProblemAuditLog[]        @relation("problemAuditActor")
   lastLoginAt            DateTime?
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
@@ -241,6 +247,7 @@ model SystemSettings {
   reopenWindowDays       Int      @default(3)
   autoCloseResolvedDays  Int      @default(5)
   maxAutomationLoopDepth Int      @default(5)
+  featureFlags           Json     @default("{}")
   modifiedById           String?
   modifiedBy             User?    @relation("settingsModifier", fields: [modifiedById], references: [id])
   createdAt              DateTime @default(now())
@@ -354,6 +361,7 @@ model Ticket {
   attachments            Attachment[]
   slaInstances           SlaInstance[]
   knowledgeArticles      KnowledgeArticle[]
+  problemIncidents       ProblemIncident[]
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
@@ -966,7 +974,7 @@ model ServiceRequest {
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
   /// One approval per request — enforced at the DB level.
-  approvalRequestId String? @unique
+  approvalRequestId String?              @unique
 
   @@index([status])
   @@index([requesterId, createdAt(sort: Desc)])
@@ -1072,33 +1080,35 @@ enum KnowledgeVisibility {
 /// change appends an immutable KnowledgeRevision. `version` is both the
 /// current revision number and the optimistic-concurrency token.
 model KnowledgeArticle {
-  id                String               @id @default(cuid())
-  title             String
-  summary           String?
-  body              String
-  category          String
-  tags              String[]             @default([])
-  status            KnowledgeStatus      @default(draft)
-  visibility        KnowledgeVisibility  @default(internal)
+  id                     String              @id @default(cuid())
+  title                  String
+  summary                String?
+  body                   String
+  category               String
+  tags                   String[]            @default([])
+  status                 KnowledgeStatus     @default(draft)
+  visibility             KnowledgeVisibility @default(internal)
   /// Only consulted when visibility = restricted; empty list = nobody but
   /// the author and a publisher can read it.
-  allowedRoles      Role[]               @default([])
-  authorId          String
-  author            User                 @relation("knowledgeAuthor", fields: [authorId], references: [id])
-  ownerId           String?
-  owner             User?                @relation("knowledgeOwner", fields: [ownerId], references: [id])
-  sourceTicketId    String?
-  sourceTicket      Ticket?              @relation(fields: [sourceTicketId], references: [id])
-  version           Int                  @default(1)
-  publishedAt       DateTime?
-  reviewIntervalDays Int                 @default(90)
-  reviewDueAt       DateTime?
-  helpfulCount      Int                  @default(0)
-  notHelpfulCount   Int                  @default(0)
-  revisions         KnowledgeRevision[]
-  feedback          KnowledgeFeedback[]
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  allowedRoles           Role[]              @default([])
+  authorId               String
+  author                 User                @relation("knowledgeAuthor", fields: [authorId], references: [id])
+  ownerId                String?
+  owner                  User?               @relation("knowledgeOwner", fields: [ownerId], references: [id])
+  sourceTicketId         String?
+  sourceTicket           Ticket?             @relation(fields: [sourceTicketId], references: [id])
+  version                Int                 @default(1)
+  publishedAt            DateTime?
+  reviewIntervalDays     Int                 @default(90)
+  reviewDueAt            DateTime?
+  helpfulCount           Int                 @default(0)
+  notHelpfulCount        Int                 @default(0)
+  revisions              KnowledgeRevision[]
+  feedback               KnowledgeFeedback[]
+  /// Known errors published to the KB from this article (back-relation of KnownError.publishedArticleId).
+  knownErrorPublications KnownError[]
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
 
   @@index([status, visibility])
   @@index([category, status])
@@ -1114,21 +1124,21 @@ model KnowledgeArticle {
 /// Unique (articleId, revisionNumber) — a duplicated snapshot from a retry
 /// is impossible at the DB level.
 model KnowledgeRevision {
-  id             String            @id @default(cuid())
+  id             String              @id @default(cuid())
   articleId      String
-  article        KnowledgeArticle  @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  article        KnowledgeArticle    @relation(fields: [articleId], references: [id], onDelete: Restrict)
   revisionNumber Int
   title          String
   summary        String?
   body           String
   category       String
-  tags           String[]          @default([])
+  tags           String[]            @default([])
   visibility     KnowledgeVisibility
-  allowedRoles   Role[]            @default([])
+  allowedRoles   Role[]              @default([])
   changeNote     String?
   editorId       String
-  editor         User              @relation("knowledgeEditor", fields: [editorId], references: [id])
-  createdAt      DateTime          @default(now())
+  editor         User                @relation("knowledgeEditor", fields: [editorId], references: [id])
+  createdAt      DateTime            @default(now())
 
   @@unique([articleId, revisionNumber])
   @@index([articleId, createdAt(sort: Desc)])
@@ -1137,16 +1147,253 @@ model KnowledgeRevision {
 /// One live vote per (article, user) — re-voting updates the row and the
 /// counters move by the delta, so a flip can never double-count.
 model KnowledgeFeedback {
-  id        String            @id @default(cuid())
+  id        String           @id @default(cuid())
   articleId String
-  article   KnowledgeArticle  @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Restrict)
   userId    String
-  user      User              @relation("knowledgeFeedback", fields: [userId], references: [id])
+  user      User             @relation("knowledgeFeedback", fields: [userId], references: [id])
   helpful   Boolean
   comment   String?
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   @@unique([articleId, userId])
   @@index([articleId, helpful])
+}
+
+/**
+ * ── Problem Management (Phase 5) ───────────────────────────────────────────
+ * Problems, incident linking, RCA (5 Whys + Fishbone), workarounds,
+ * known errors, change integration, detection suggestions.
+ */
+
+enum ProblemStatus {
+  IDENTIFIED
+  INVESTIGATION
+  ROOT_CAUSE_KNOWN
+  WORKAROUND_DOCUMENTED
+  PENDING_CHANGE
+  RESOLVED
+  CLOSED
+}
+
+enum ProblemPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RCAType {
+  FIVE_WHYS
+  FISHBONE
+  NONE
+}
+
+enum KnownErrorStatus {
+  DRAFT
+  UNDER_REVIEW
+  PUBLISHED
+  RETIRED
+}
+
+enum KnownErrorVisibility {
+  IT_ONLY
+  EMPLOYEE_SELF_SERVICE
+}
+
+/// Human number sequence for problems (PRB-YYYY-NNNNNN)
+model ProblemCounter {
+  key  String @id @default("PRB")
+  next Int    @default(1)
+}
+
+/// Human number sequence for known errors (KE-YYYY-NNNNNN)
+model KnownErrorCounter {
+  key  String @id @default("KE")
+  next Int    @default(1)
+}
+
+model Problem {
+  id          String          @id @default(cuid())
+  number      String          @unique // e.g., PRB-2026-000001
+  title       String
+  description String          @db.Text
+  status      ProblemStatus   @default(IDENTIFIED)
+  priority    ProblemPriority @default(MEDIUM)
+  rcaType     RCAType         @default(NONE)
+
+  // Ownership
+  ownerId String
+  owner   User   @relation("problemOwner", fields: [ownerId], references: [id])
+
+  // Impact
+  affectedServices String[]
+  affectedAssets   String[]
+  affectedCIs      String[]
+  businessImpact   String   @db.Text
+
+  // Root Cause Analysis
+  rootCause          String? @db.Text
+  resolutionSummary  String? @db.Text
+  rcaNotes           String? @db.Text
+  fiveWhys           Json?
+  fishbone           Json?
+  confirmedRootCause Boolean @default(false)
+
+  // Workaround / Known Error link
+  workaround   String?     @db.Text
+  knownErrorId String?     @unique
+  knownError   KnownError? @relation("ProblemPrimaryKnownError", fields: [knownErrorId], references: [id])
+
+  // Change integration
+  changeRequestIds String[]
+
+  // Detection
+  detectionSource    String? // "AUTO" | "MANUAL" | "AUTOMATION_RULE"
+  autoDetectionScore Float?
+
+  // Optimistic concurrency
+  version    Int       @default(1)
+
+  // Timestamps
+  identifiedAt           DateTime  @default(now())
+  investigationStartedAt DateTime?
+  rootCauseIdentifiedAt  DateTime?
+  workaroundDocumentedAt DateTime?
+  changeInitiatedAt      DateTime?
+  resolvedAt             DateTime?
+  closedAt               DateTime?
+  reviewDueAt            DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  incidents   ProblemIncident[]
+  rca         ProblemRCA?
+  auditLogs   ProblemAuditLog[]
+  knownErrors KnownError[]      @relation("KnownErrorSourceProblem")
+
+  @@index([status])
+  @@index([ownerId])
+  @@index([number])
+  @@index([identifiedAt])
+  @@index([affectedServices, affectedAssets])
+}
+
+model ProblemIncident {
+  id         String   @id @default(cuid())
+  problemId  String
+  problem    Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  incidentId String
+  incident   Ticket   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  linkedAt   DateTime @default(now())
+  linkedById String
+  linkedBy   User     @relation("problemIncidentLinker", fields: [linkedById], references: [id])
+  note       String?
+
+  @@unique([problemId, incidentId])
+  @@index([incidentId])
+}
+
+model KnownError {
+  id                String   @id @default(cuid())
+  number            String   @unique // e.g., KE-2026-000001
+  title             String
+  problemId         String
+  problem           Problem  @relation("KnownErrorSourceProblem", fields: [problemId], references: [id])
+  /// Back-relation for Problem.knownErrorId — the problem this KE is the primary record for.
+  primaryForProblem Problem? @relation("ProblemPrimaryKnownError")
+
+  // Content
+  rootCause       String  @db.Text
+  symptoms        String  @db.Text
+  workaround      String  @db.Text
+  resolutionNotes String? @db.Text
+
+  // Scope
+  affectedServices String[]
+  affectedAssets   String[]
+  affectedCIs      String[]
+
+  // Lifecycle
+  status     KnownErrorStatus     @default(DRAFT)
+  visibility KnownErrorVisibility @default(IT_ONLY)
+
+  // Ownership / Approval
+  ownerId      String
+  owner        User      @relation("knownErrorOwner", fields: [ownerId], references: [id])
+  approvedById String?
+  approvedBy   User?     @relation("knownErrorApprover", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  // Review
+  reviewDueAt    DateTime?
+  lastReviewedAt DateTime?
+
+  // KB Integration
+  publishedArticleId String?
+  publishedArticle   KnowledgeArticle? @relation(fields: [publishedArticleId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([status])
+  @@index([visibility])
+  @@index([problemId])
+  @@index([ownerId])
+}
+
+model ProblemRCA {
+  id        String  @id @default(cuid())
+  problemId String  @unique
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  // 5 Whys
+  fiveWhys Json? // { steps: [{ why: string, answer: string }], rootCause: string }
+
+  // Fishbone
+  fishbone Json? // { categories: { People: string[], Process: string[], Technology: string[], Equipment: string[], Environment: string[], Other: string[] }, rootCause: string }
+
+  // Evidence
+  attachments String[] // array of attachment IDs
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([problemId])
+}
+
+model ProblemAuditLog {
+  id        String   @id @default(cuid())
+  problemId String
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  action    String // e.g., "STATUS_CHANGED", "INCIDENT_LINKED", "RCA_UPDATED", "CHANGE_LINKED", "KNOWN_ERROR_CREATED"
+  oldValue  Json?
+  newValue  Json?
+  actorId   String
+  actor     User     @relation("problemAuditActor", fields: [actorId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([problemId])
+  @@index([createdAt])
+}
+
+model DetectionSuggestion {
+  id           String    @id @default(cuid())
+  incidentIds  String[]
+  problemId    String? // null = new problem suggested
+  score        Float
+  matchReasons String[] // ["same_service", "same_asset", "symptom_similarity"]
+  status       String    @default("PENDING") // PENDING | ACCEPTED | REJECTED | EXPIRED
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+
+  @@index([status])
+  @@index([expiresAt])
 }

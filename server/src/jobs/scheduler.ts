@@ -6,6 +6,7 @@ import { prisma } from '../prisma/client.js';
 import { sendEmail } from '../modules/notifications/email.js';
 import { runSlaSweep } from '../sla/sla.service.js';
 import { runApprovalSweep } from '../modules/serviceMgmt/approvals.service.js';
+import { startProblemDetection, stopProblemDetection } from '../modules/problems/detection/detectionWorker.js';
 
 /**
  * Job scheduler with two interchangeable backends:
@@ -149,11 +150,15 @@ export function startScheduler(): void {
   } else {
     startInMemory();
   }
+  // Problem detection owns its own queue and its own cadence, so it starts
+  // independently of which sweep backend came up.
+  void startProblemDetection().catch((err) => logger.error('[problems] detection startup failed', err));
 }
 
 export async function stopScheduler(): Promise<void> {
   for (const t of inMemoryTimers) clearInterval(t);
   inMemoryTimers.clear();
+  await stopProblemDetection();
   if (worker) await worker.close();
   if (queue) await queue.close();
   worker = null;

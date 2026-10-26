@@ -114,6 +114,7 @@ export interface TicketListParams {
   q?: string;
   sla?: 'at_risk';
   page?: number;
+  limit?: number;
   sort?: 'newest' | 'oldest' | 'priority';
 }
 

@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { PriorityBadge, SlaChips, STATUS_LABELS, StatusBadge } from '@/components/TicketBadges';
+import FindRelatedModal from '@/components/problems/FindRelatedModal';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { ticketsApi, type TicketStatus } from '@/lib/ticketsApi';
@@ -36,6 +37,9 @@ export default function TicketDetailPage() {
   const [isInternal, setIsInternal] = useState(false);
   const [resolutionNote, setResolutionNote] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Above the loading/error early returns — a hook after those would break
+  // the Rules of Hooks on the first render where data is still missing.
+  const [showFindRelated, setShowFindRelated] = useState(false);
 
   const detailQuery = useQuery({
     queryKey: ['ticket', id],
@@ -122,6 +126,8 @@ export default function TicketDetailPage() {
   const canClose = hasAnyPermission(['tickets:close']);
   const canAssign = hasAnyPermission(['tickets:assign']);
   const canWorknotes = hasAnyPermission(['tickets:worknotes']);
+  // The modal's only action (create problem from incidents) needs problems:create.
+  const canSeeProblems = hasAnyPermission(['problems:create']);
   const isRequester = t.requester.id === user?.employee?.id;
 
   const doTransition = (status: 'in_progress' | 'pending_employee' | 'pending_vendor' | 'resolved' | 'closed') => {
@@ -220,7 +226,7 @@ export default function TicketDetailPage() {
         </section>
 
         {/* Actions */}
-        {transitionButtons.length > 0 && (
+        {(transitionButtons.length > 0 || canSeeProblems) && (
           <section className="rounded-xl border border-border bg-card p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Actions</h2>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -235,6 +241,15 @@ export default function TicketDetailPage() {
                   {b.label}
                 </button>
               ))}
+              {canSeeProblems && (
+                <button
+                  type="button"
+                  onClick={() => setShowFindRelated(true)}
+                  className="cursor-pointer rounded-md border border-border bg-background px-4 py-2 text-sm transition-colors hover:border-ring hover:bg-muted"
+                >
+                  Find related problems
+                </button>
+              )}
             </div>
             {(transitionButtons.some((b) => b.need) || transition.error) && (
               <div className="mt-3">
@@ -304,6 +319,14 @@ export default function TicketDetailPage() {
             </form>
           )}
         </section>
+
+        {showFindRelated && (
+          <FindRelatedModal
+            incidentId={t.id}
+            incidentNumber={t.number}
+            onClose={() => setShowFindRelated(false)}
+          />
+        )}
       </div>
 
       {/* Side panel */}

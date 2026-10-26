@@ -24,6 +24,9 @@ import { catalogRouter } from './modules/serviceMgmt/catalog.routes.js';
 import { requestsRouter } from './modules/serviceMgmt/requests.routes.js';
 import { approvalsRouter } from './modules/serviceMgmt/approvals.routes.js';
 import { knowledgeRouter } from './modules/knowledge/knowledge.routes.js';
+import { problemsRouter } from './modules/problems/problems.routes.js';
+import { detectionRouter } from './modules/problems/detection/detection.routes.js';
+import { knownErrorsRouter } from './modules/known-errors/knownErrors.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -65,6 +68,12 @@ export function createApp(): Express {
   app.use('/api/v1/service-requests', requestsRouter);
   app.use('/api/v1/approvals', approvalsRouter);
   app.use('/api/v1/knowledge', knowledgeRouter);
+  // Detection routes mount FIRST: `problemsRouter`'s `GET /:id` would otherwise
+  // match `/problems/detect` and look up a problem with the id "detect".
+  // Requests matching nothing in detectionRouter fall through to it.
+  app.use('/api/v1/problems', detectionRouter);
+  app.use('/api/v1/problems', problemsRouter);
+  app.use('/api/v1/known-errors', knownErrorsRouter);
 
   // SPA fallback for client-side routing — only for non-API GET requests.
   app.get(/^(?!\/api\/).*/, (_req, res) => {

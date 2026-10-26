@@ -254,7 +254,9 @@ export async function orgOptions() {
     prisma.location.findMany({ where: { active: true }, select: { id: true, name: true, code: true }, orderBy: { name: 'asc' } }),
     prisma.employee.findMany({
       where: { employmentStatus: 'active' },
-      select: { id: true, employeeId: true, name: true },
+      // `userId` is the linked login account — problem/approval owners are
+      // Users, not Employees, so callers needing an owner id use this.
+      select: { id: true, employeeId: true, name: true, userId: true },
       orderBy: { name: 'asc' },
       take: 500,
     }),

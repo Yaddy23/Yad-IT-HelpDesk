@@ -15,12 +15,12 @@ const ItemDialog = ({ item, onClose, onSaved }: {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
-  const [icon, setIcon] = useState('');
+  const [icon] = useState('');
   const [sortOrder, setSortOrder] = useState(0);
   const [active, setActive] = useState(true);
-  const [departments, setDepartments] = useState<string[]>([]);
-  const [locations, setLocations] = useState<string[]>([]);
-  const [roles, setRoles] = useState<string[]>([]);
+  const [departments] = useState<string[]>([]);
+  const [locations] = useState<string[]>([]);
+  const [roles] = useState<string[]>([]);
   const [fields, setFields] = useState<FormField[]>([]);
   const [error, setError] = useState('');
 
@@ -241,7 +241,7 @@ export default function CatalogAdminPage() {
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [creating, setCreating] = useState(false);
   const [ruleFor, setRuleFor] = useState<CatalogItem | null>(null);
-  const [notice, setNotice] = useState('');
+  const [, setNotice] = useState('');
 
   return (
     <div className="p-4">
@@ -253,7 +253,7 @@ export default function CatalogAdminPage() {
         {isLoading ? (
           <div className="text-gray-500">Loading...</div>
         ) : (
-          items?.map((item, index) => (
+          items?.map((item) => (
             <div key={item.id} className="border rounded p-3 mb-2">
               <div className="flex justify-between">
                 <span className="font-medium">{item.name}</span>

@@ -51,7 +51,7 @@ Process: superpowers (brainstorm → design → plan → phased build). After ea
 - [x] Service requests: multi-item, states, fulfillment gating on approvals *(server done: submit/info/cancel/fulfill, gating enforced in decision tx; client done: request dialog with form validation, my requests list with detail)*
 - [x] Approval engine: rules config, single/all/any/sequential, delegation, deadlines, reminders, SoD block, DB-unique deduped decisions, full history *(server done; client queue done: approvals page with decide/delegate dialogs)*
 - [x] Knowledge base: articles, revisions, states, visibility, search, feedback, resolved-ticket→draft-article *(server done: routes, service, validators, tests; client done: KnowledgePage browse/search, KnowledgeDetailPage with prose/render/metadata/actions/revisions, KnowledgeCreatePage, knowledgeApi.ts, icons + nav)*
-- [ ] Problem management: lifecycle, incident links, RCA, workaround vs permanent fix, recurring-incident detection
+- [x] Problem management: lifecycle, incident links, RCA, workaround vs permanent fix, recurring-incident detection
 - [ ] Change management: types, risk assessment, plans, approval rules, scheduling conflicts w/ maintenance windows, PIR, failure/rollback tracking
 - [ ] Major incidents: declaration criteria/permissions, commander, stakeholder comms, timeline (internal notes protected)
 - ✅ Acceptance: brief tests 8–14 *(13 serviceMgmt integration tests green + 17 Playwright e2e tests green)*

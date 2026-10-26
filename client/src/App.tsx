@@ -18,6 +18,13 @@ import PlaceholderPage from '@/pages/PlaceholderPage';
 import TicketCreatePage from '@/pages/TicketCreatePage';
 import TicketDetailPage from '@/pages/TicketDetailPage';
 import TicketsPage from '@/pages/TicketsPage';
+import ProblemCreatePage from '@/pages/ProblemCreatePage';
+import ProblemDetailPage from '@/pages/ProblemDetailPage';
+import ProblemsPage from '@/pages/ProblemsPage';
+import ProblemsDashboardPage from '@/pages/ProblemsDashboardPage';
+import KnownErrorCreatePage from '@/pages/KnownErrorCreatePage';
+import KnownErrorDetailPage from '@/pages/KnownErrorDetailPage';
+import KnownErrorsPage from '@/pages/KnownErrorsPage';
 import UsersPage from '@/pages/UsersPage';
 import CatalogAdminPage from '@/pages/CatalogAdminPage';
 import CatalogPage from '@/pages/CatalogPage';
@@ -63,6 +70,48 @@ export default function App() {
             path="tickets/:id"
             element={<ProtectedRoute permissions={['tickets:read']}>
               <TicketDetailPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="problems"
+            element={<ProtectedRoute permissions={['problems:read']}>
+              <ProblemsPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="problems/new"
+            element={<ProtectedRoute permissions={['problems:create']}>
+              <ProblemCreatePage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="problems/:id"
+            element={<ProtectedRoute permissions={['problems:read']}>
+              <ProblemDetailPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="problems/dashboard"
+            element={<ProtectedRoute permissions={['problems:read']}>
+              <ProblemsDashboardPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="known-errors"
+            element={<ProtectedRoute permissions={['known_errors:read']}>
+              <KnownErrorsPage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="known-errors/new"
+            element={<ProtectedRoute permissions={['known_errors:create']}>
+              <KnownErrorCreatePage />
+            </ProtectedRoute>}
+          />
+          <Route
+            path="known-errors/:id"
+            element={<ProtectedRoute permissions={['known_errors:read']}>
+              <KnownErrorDetailPage />
             </ProtectedRoute>}
           />
           <Route path="notifications" element={<NotificationsPage />} />
